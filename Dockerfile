@@ -4,15 +4,15 @@
 FROM node:20-alpine AS base
 
 # Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++ gcc
+RUN apk add --no-cache python3 make g++ gcc musl-dev linux-headers
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies
-RUN npm ci --omit=dev && \
+# Install all dependencies (needed for native module builds)
+RUN npm ci && \
     npm cache clean --force
 
 # Production stage
