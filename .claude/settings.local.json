@@ -14,7 +14,15 @@
       "Bash(cmd.exe //c \"netstat -ano | findstr :8080\")",
       "Bash(cmd.exe //c \"taskkill /F /PID 729500\")",
       "Bash(cmd.exe //c \"taskkill /F /PID 745708\")",
-      "Bash(cmd.exe:*)"
+      "Bash(cmd.exe:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git tag:*)",
+      "Bash(git commit:*)",
+      "Bash(docker build:*)"
     ],
     "deny": [],
     "ask": []
