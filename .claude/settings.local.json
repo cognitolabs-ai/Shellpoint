@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(node -e \"console.log(require(''crypto'').randomBytes(64).toString(''hex''))\")",
+      "Bash(npm install)",
+      "Bash(npm start)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd.exe //c \"taskkill /F /PID 713916\")",
+      "WebSearch",
+      "WebFetch(domain:xtermjs.org)",
+      "Bash(cmd.exe //c \"netstat -ano | findstr :8080\")",
+      "Bash(cmd.exe //c \"taskkill /F /PID 729500\")",
+      "Bash(cmd.exe //c \"taskkill /F /PID 745708\")",
+      "Bash(cmd.exe:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

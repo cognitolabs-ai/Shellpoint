@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShellPoint - Professional SSH Client by CognitioLabs</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3b82f6',
+            'primary-light': '#60a5fa',
+            'primary-dark': '#2563eb',
+            dark: { 100: '#3e3e42', 200: '#2d2d30', 300: '#252526', 400: '#1e1e1e' }
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'gradient': 'gradient 3s ease infinite',
+          },
+          keyframes: {
+            gradient: {
+              '0%, 100%': { backgroundPosition: '0% 50%' },
+              '50%': { backgroundPosition: '100% 50%' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-dark-400 text-white font-sans antialiased overflow-hidden h-screen">
+  
+  <!-- Auth Screen -->
+  <div id="auth-screen" class="flex items-center justify-center w-full h-full bg-gradient-to-br from-dark-400 via-dark-300 to-dark-400 animate-gradient bg-[length:200%_200%]">
+    <div class="w-full max-w-md p-10 bg-dark-300/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-dark-100/50 transform hover:scale-[1.01] transition-transform">
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center justify-center w-16 h-16 mb-4 bg-gradient-to-br from-primary to-primary-light rounded-2xl shadow-lg shadow-primary/50">
+          <span class="material-icons text-4xl text-white">lock</span>
+        </div>
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-primary via-primary-light to-primary bg-clip-text text-transparent mb-2">ShellPoint</h1>
+        <p class="text-gray-400 text-sm">Professional SSH Terminal by <span class="text-primary font-semibold">CognitioLabs</span></p>
+      </div>
+      
+      <div class="flex gap-2 mb-6 p-1 bg-dark-200/50 rounded-xl">
+        <button class="auth-tab flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-200 bg-primary text-dark-400 shadow-lg shadow-primary/30" data-tab="login">Login</button>
+        <button class="auth-tab flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-200 text-gray-400 hover:text-white hover:bg-dark-100/30" data-tab="register">Register</button>
+      </div>
+
+      <div id="auth-error" class="hidden mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm backdrop-blur-sm"></div>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+          <input type="text" id="login-username" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white placeholder-gray-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+          <input type="password" id="login-password" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white placeholder-gray-500">
+        </div>
+        <button type="submit" class="w-full px-6 py-3 mt-6 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/30 transform hover:scale-[1.02] active:scale-[0.98] transition-all">Login</button>
+      </form>
+
+      <form id="register-form" class="hidden space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+          <input type="text" id="register-username" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Email <span class="text-gray-500">(optional)</span></label>
+          <input type="email" id="register-email" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+          <input type="password" id="register-password" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <button type="submit" class="w-full px-6 py-3 mt-6 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/30 transform hover:scale-[1.02] active:scale-[0.98] transition-all">Create Account</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="hidden w-full h-full flex">
+    <!-- Sidebar -->
+    <aside class="w-80 bg-dark-300 border-r border-dark-100 flex flex-col overflow-hidden">
+      <!-- Logo Header -->
+      <div class="p-6 border-b border-dark-100/50 flex-shrink-0">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-12 h-12 bg-gradient-to-br from-primary to-primary-light rounded-xl shadow-lg shadow-primary/30 flex items-center justify-center">
+            <svg class="w-8 h-8" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <rect x="15" y="25" width="70" height="50" rx="4" fill="#1e1e1e" stroke="currentColor" stroke-width="3"/>
+              <circle cx="25" cy="35" r="2" fill="#f48771"/>
+              <circle cx="35" cy="35" r="2" fill="#dcdcaa"/>
+              <circle cx="45" cy="35" r="2" fill="currentColor"/>
+              <line x1="25" y1="48" x2="50" y2="48" stroke="currentColor" stroke-width="2"/>
+              <line x1="25" y1="58" x2="65" y2="58" stroke="currentColor" stroke-width="2"/>
+              <rect x="55" y="55" width="2" height="6" fill="currentColor"><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/></rect>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-primary">ShellPoint</h1>
+            <p class="text-xs text-gray-400">by CognitioLabs</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- User Info -->
+      <div class="px-6 py-4 border-b border-dark-100/50 flex-shrink-0 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-gray-300">Connections</h2>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-xs text-gray-500">Logged in as:</span>
+            <button id="current-user" class="text-xs font-medium text-primary hover:underline cursor-pointer" title="Edit Profile"></button>
+            <button id="keys-btn" class="ml-1 hover:scale-110 transition-transform" title="SSH Keys Vault"><svg width="16px" height="16px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M15.6807 14.5869C19.1708 14.5869 22 11.7692 22 8.29344C22 4.81767 19.1708 2 15.6807 2C12.1907 2 9.3615 4.81767 9.3615 8.29344C9.3615 9.90338 10.0963 11.0743 10.0963 11.0743L2.45441 18.6849C2.1115 19.0264 1.63143 19.9143 2.45441 20.7339L3.33616 21.6121C3.67905 21.9048 4.54119 22.3146 5.2466 21.6121L6.27531 20.5876C7.30403 21.6121 8.4797 21.0267 8.92058 20.4412C9.65538 19.4167 8.77362 18.3922 8.77362 18.3922L9.06754 18.0995C10.4783 19.5045 11.7128 18.6849 12.1537 18.0995C12.8885 17.075 12.1537 16.0505 12.1537 16.0505C11.8598 15.465 11.272 15.465 12.0067 14.7333L12.8885 13.8551C13.5939 14.4405 15.0439 14.5869 15.6807 14.5869Z" stroke="#ffffff" stroke-width="0.5" stroke-linejoin="round"></path> <path opacity="0.5" d="M17.8851 8.29353C17.8851 9.50601 16.8982 10.4889 15.6807 10.4889C14.4633 10.4889 13.4763 9.50601 13.4763 8.29353C13.4763 7.08105 14.4633 6.09814 15.6807 6.09814C16.8982 6.09814 17.8851 7.08105 17.8851 8.29353Z" stroke="#ffffff" stroke-width="0.5"></path> </g></svg></button>
+          </div>
+        </div>
+        <button id="logout-btn" class="px-3 py-1.5 text-xs bg-dark-200 hover:bg-dark-100 rounded-lg transition-colors text-gray-400 hover:text-white">Logout</button>
+      </div>
+
+      <!-- Connections List -->
+      <div id="connections" class="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-dark-100 scrollbar-track-transparent"></div>
+
+      <!-- Add Connection Button -->
+      <div class="p-4 border-t border-dark-100/50 flex-shrink-0">
+        <button id="add-connection-btn" class="w-full px-4 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20 transform hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+          <span class="material-icons">add</span> Add Connection
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col bg-dark-400">
+      <!-- Tabs Bar -->
+      <div id="tabs-bar" class="hidden h-12 bg-dark-300 border-b border-dark-100 flex items-center px-2 gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-dark-100 scrollbar-track-transparent">
+        <!-- Tabs will be added here dynamically -->
+      </div>
+
+      <!-- Welcome / Terminal Container -->
+      <div id="welcome" class="flex-1 flex items-center justify-center">
+        <div class="text-center">
+          <div class="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-primary/20 to-primary-light/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-primary/20">
+            <span class="material-icons text-5xl text-primary">rocket_launch</span>
+          </div>
+          <h3 class="text-2xl font-bold text-gray-300 mb-2">Ready to Connect</h3>
+          <p class="text-gray-500">Select or create a connection to start</p>
+        </div>
+      </div>
+
+      <!-- Terminals Container (hidden by default) -->
+      <div id="terminals-container" class="hidden flex-1 relative">
+        <!-- Multiple terminal containers will be added here -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Connection Modal -->
+  <div id="connection-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-300 rounded-2xl shadow-2xl w-full max-w-lg border border-dark-100/50 transform scale-95 opacity-0 transition-all duration-200" id="connection-modal-content">
+      <div class="p-6 border-b border-dark-100/50">
+        <h3 id="modal-title" class="text-2xl font-bold text-primary">New Connection</h3>
+      </div>
+      <form id="connection-form" class="p-6 space-y-4">
+        <input type="hidden" id="conn-id">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Name</label>
+          <input type="text" id="conn-name" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Host</label>
+            <input type="text" id="conn-host" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Port</label>
+            <input type="number" id="conn-port" value="22" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+          <input type="text" id="conn-username" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Description <span class="text-gray-500">(optional)</span></label>
+          <textarea id="conn-description" rows="2" placeholder="Add a description for this connection..." class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white resize-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-3">Authentication</label>
+          <div class="flex gap-4 p-1 bg-dark-200/50 rounded-xl">
+            <label class="flex-1 flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer transition-all auth-type-label bg-primary/20 border border-primary/30">
+              <input type="radio" name="auth-type" value="password" checked class="text-primary focus:ring-primary">
+              <span class="font-medium text-primary">Password</span>
+            </label>
+            <label class="flex-1 flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer transition-all auth-type-label hover:bg-dark-100/30">
+              <input type="radio" name="auth-type" value="key" class="text-primary focus:ring-primary">
+              <span class="font-medium">SSH Key</span>
+            </label>
+          </div>
+        </div>
+        <div id="password-group">
+          <label class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+          <input type="password" id="conn-password" placeholder="Leave empty to keep existing" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <div id="key-group" class="hidden">
+          <label class="block text-sm font-medium text-gray-300 mb-2">SSH Key</label>
+          <select id="conn-key-id" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+            <option value="">-- Select a key --</option>
+          </select>
+          <p class="mt-2 text-xs text-gray-400">Don't have a key? <a href="#" id="add-key-link" class="text-primary hover:underline">Add one in vault</a></p>
+        </div>
+        <div class="flex gap-3 pt-4">
+          <button type="button" id="cancel-btn" class="flex-1 px-6 py-3 bg-dark-200 hover:bg-dark-100 rounded-xl font-semibold transition-all">Cancel</button>
+          <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Keys Vault Modal -->
+  <div id="keys-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-300 rounded-2xl shadow-2xl w-full max-w-3xl border border-dark-100/50">
+      <div class="p-6 border-b border-dark-100/50">
+        <h3 class="text-2xl font-bold text-primary flex items-center gap-3"><span class="material-icons text-3xl">vpn_key</span> SSH Keys Vault</h3>
+      </div>
+      <div id="keys-list" class="p-6 max-h-96 overflow-y-auto space-y-3"></div>
+      <div class="p-6 border-t border-dark-100/50 space-y-3">
+        <button id="add-key-btn" class="w-full px-6 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20 flex items-center justify-center gap-2"><span class="material-icons">add</span> Add SSH Key</button>
+        <button id="close-keys-btn" class="w-full px-6 py-3 bg-dark-200 hover:bg-dark-100 rounded-xl font-semibold transition-all">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profile-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-300 rounded-2xl shadow-2xl w-full max-w-lg border border-dark-100/50">
+      <div class="p-6 border-b border-dark-100/50">
+        <h3 class="text-2xl font-bold text-primary flex items-center gap-3"><span class="material-icons text-3xl">person</span> User Profile</h3>
+      </div>
+      <form id="profile-form" class="p-6 space-y-4">
+        <div id="profile-error" class="hidden p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm"></div>
+        <div id="profile-success" class="hidden p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-sm"></div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Username</label>
+          <input type="text" id="profile-username" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+          <p class="mt-1 text-xs text-gray-400">Changing username will log you in again</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Email <span class="text-gray-500">(optional)</span></label>
+          <input type="email" id="profile-email" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Terminal Theme</label>
+          <select id="profile-theme" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+            <option value="default">Default</option>
+            <option value="dracula">Dracula</option>
+            <option value="monokai">Monokai</option>
+            <option value="nord">Nord</option>
+            <option value="oneDark">One Dark</option>
+            <option value="solarizedDark">Solarized Dark</option>
+            <option value="gruvbox">Gruvbox Dark</option>
+            <option value="tokyoNight">Tokyo Night</option>
+          </select>
+          <p class="mt-1 text-xs text-gray-400">Choose your preferred terminal color scheme</p>
+        </div>
+
+        <div class="pt-4 border-t border-dark-100/50">
+          <h4 class="text-sm font-semibold text-gray-300 mb-3">Change Password</h4>
+          <p class="text-xs text-gray-400 mb-3">Leave blank to keep current password</p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">Current Password</label>
+              <input type="password" id="profile-current-password" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">New Password</label>
+              <input type="password" id="profile-new-password" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+              <p class="mt-1 text-xs text-gray-400">Min 8 characters, at least one letter and number</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button type="button" id="cancel-profile-btn" class="flex-1 px-6 py-3 bg-dark-200 hover:bg-dark-100 rounded-xl font-semibold transition-all">Cancel</button>
+          <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Key Modal -->
+  <div id="add-key-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-300 rounded-2xl shadow-2xl w-full max-w-2xl border border-dark-100/50">
+      <div class="p-6 border-b border-dark-100/50">
+        <h3 class="text-2xl font-bold text-primary">Add SSH Key</h3>
+      </div>
+      <form id="add-key-form" class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Key Name</label>
+          <input type="text" id="key-name" placeholder="e.g., My Personal Key" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Private Key</label>
+          <textarea id="key-private" rows="8" placeholder="-----BEGIN ... KEY-----" required class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white font-mono text-sm resize-none"></textarea>
+          <p class="mt-2 text-xs text-gray-400">Or <label for="key-file-input" class="text-primary hover:underline cursor-pointer">upload from file</label><input type="file" id="key-file-input" accept=".pem,.key" class="hidden"></p>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Passphrase <span class="text-gray-500">(optional)</span></label>
+            <input type="password" id="key-passphrase" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Key Type</label>
+            <select id="key-type" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+              <option value="rsa">RSA</option>
+              <option value="ed25519">ED25519</option>
+              <option value="ecdsa">ECDSA</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex gap-3 pt-4">
+          <button type="button" id="cancel-key-btn" class="flex-1 px-6 py-3 bg-dark-200 hover:bg-dark-100 rounded-xl font-semibold transition-all">Cancel</button>
+          <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20">Save Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="app.js"></script>
+  
+  <script>
+    // Modal animations
+    document.getElementById('connection-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'connection-modal') {
+        document.getElementById('connection-modal').classList.add('hidden');
+      }
+    });
+    
+    // Auth tab styling
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.auth-tab').forEach(t => {
+          t.classList.remove('bg-primary', 'text-dark-400', 'shadow-lg', 'shadow-primary/30');
+          t.classList.add('text-gray-400', 'hover:text-white', 'hover:bg-dark-100/30');
+        });
+        this.classList.remove('text-gray-400', 'hover:text-white', 'hover:bg-dark-100/30');
+        this.classList.add('bg-primary', 'text-dark-400', 'shadow-lg', 'shadow-primary/30');
+      });
+    });
+    
+    // Auth type radio styling
+    document.querySelectorAll('input[name="auth-type"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.querySelectorAll('.auth-type-label').forEach(label => {
+          label.classList.remove('bg-primary/20', 'border', 'border-primary/30');
+          label.querySelector('span').classList.remove('text-primary');
+          label.classList.add('hover:bg-dark-100/30');
+        });
+        const label = this.closest('.auth-type-label');
+        label.classList.add('bg-primary/20', 'border', 'border-primary/30');
+        label.querySelector('span').classList.add('text-primary');
+        label.classList.remove('hover:bg-dark-100/30');
+      });
+    });
+  </script>
+</body>
+</html>
