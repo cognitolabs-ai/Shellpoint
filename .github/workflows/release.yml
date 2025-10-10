@@ -47,7 +47,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -71,7 +71,7 @@ jobs:
           body: |
             ## ShellPoint ${{ steps.version.outputs.VERSION }}
 
-            Professional web-based SSH client by CognitionLabs
+            Professional web-based SSH client by CognitioLabs
 
             ### Docker Image
             ```bash
