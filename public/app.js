@@ -1,9 +1,18 @@
 // Global state
 let currentUser = null;
 let sshKeys = [];
+let codeSnippets = [];
 let nextTabId = 1;
 let activeTabId = null;
 let userTheme = 'default';
+let snippetDropdownVisible = false;
+let snippetDropdownTabId = null;
+let snippetFilter = 'bash'; // 'bash' or 'all'
+let splitMode = false; // Split mode active
+let splitLayout = 1; // 1, 2, or 4 terminals
+let splitTerminals = []; // Array of tabIds currently displayed
+let tabActivityOrder = []; // Track tab access order (newest first)
+let separatorPosition = { horizontal: 50, vertical: 50 }; // Percentage positions
 
 // Tabs storage: { tabId: { terminal, ws, fitAddon, connectionId, connectionName } }
 const tabs = new Map();
@@ -349,6 +358,7 @@ function showApp() {
   loadUserProfile();
   loadConnections();
   loadKeys();
+  loadSnippets();
 }
 
 async function loadUserProfile() {
@@ -541,13 +551,27 @@ function createTabUI(tabId) {
   tabEl.className = 'flex items-center gap-2 px-4 py-2 bg-dark-200 hover:bg-dark-100 rounded-lg cursor-pointer transition-all text-sm min-w-fit';
   tabEl.innerHTML = `
     <span class="text-gray-300">${tab.connectionName}</span>
+    <button class="run-snippet-btn material-icons text-sm text-primary hover:text-primary-light transition-colors"
+            data-tab-id="${tabId}"
+            title="Run Snippet">
+      play_circle
+    </button>
     <button class="close-tab hover:text-red-400 transition-colors material-icons text-sm" data-tab-id="${tabId}" title="Close">close</button>
   `;
 
   tabEl.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('close-tab')) {
-      switchTab(tabId);
+    if (!e.target.classList.contains('close-tab') && !e.target.classList.contains('run-snippet-btn')) {
+      if (splitMode) {
+        handleTabClickInSplitMode(tabId);
+      } else {
+        switchTab(tabId);
+      }
     }
+  });
+
+  tabEl.querySelector('.run-snippet-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    showSnippetDropdown(tabId, e.target);
   });
 
   tabEl.querySelector('.close-tab').addEventListener('click', (e) => {
@@ -561,9 +585,15 @@ function createTabUI(tabId) {
   // Show terminals container
   document.getElementById('terminals-container').classList.remove('hidden');
   document.getElementById('welcome').classList.add('hidden');
+
+  // Update split icon visibility
+  updateSplitIcon();
 }
 
 function switchTab(tabId) {
+  // Track activity order
+  updateTabActivity(tabId);
+
   // Hide all terminals
   tabs.forEach((tab, id) => {
     tab.container.classList.add('hidden');
@@ -605,6 +635,16 @@ function switchTab(tabId) {
   }
 }
 
+function updateTabActivity(tabId) {
+  // Remove if already in array
+  tabActivityOrder = tabActivityOrder.filter(id => id !== tabId);
+  // Add to front (most recent)
+  tabActivityOrder.unshift(tabId);
+
+  // Keep only existing tabs
+  tabActivityOrder = tabActivityOrder.filter(id => tabs.has(id));
+}
+
 function closeTab(tabId) {
   const tab = tabs.get(tabId);
   if (!tab) return;
@@ -630,6 +670,11 @@ function closeTab(tabId) {
   // Remove from tabs map
   tabs.delete(tabId);
 
+  // Exit split mode if closed tab is displayed
+  if (splitMode && splitTerminals.includes(tabId)) {
+    exitSplitMode();
+  }
+
   // Update UI if no more tabs
   if (tabs.size === 0) {
     document.getElementById('tabs-bar').classList.add('hidden');
@@ -642,13 +687,20 @@ function closeTab(tabId) {
     switchTab(lastTabId);
   }
 
+  // Update split icon visibility
+  updateSplitIcon();
+
   // Refresh connections list
   loadConnections();
 }
 
 // Window resize handler for all tabs
 window.addEventListener('resize', () => {
-  if (activeTabId) {
+  if (splitMode) {
+    // In split mode, resize all visible terminals
+    updateTerminalSizes();
+  } else if (activeTabId) {
+    // Single terminal mode
     const tab = tabs.get(activeTabId);
     if (tab && tab.fitAddon && tab.terminal) {
       tab.fitAddon.fit();
@@ -972,6 +1024,644 @@ document.getElementById('add-key-form').addEventListener('submit', async (e) => 
     alert(err.message);
   }
 });
+
+// ========== CODE SNIPPETS MANAGEMENT ==========
+
+async function loadSnippets() {
+  try {
+    const res = await fetch('/api/snippets');
+    if (!res.ok) {
+      throw new Error(`Failed to load snippets: ${res.status}`);
+    }
+    codeSnippets = await res.json();
+    renderSnippetsList();
+  } catch (err) {
+    console.error('Error loading snippets:', err);
+  }
+}
+
+function renderSnippetsList() {
+  const container = document.getElementById('snippets-list');
+  if (!container) return;
+
+  if (codeSnippets.length === 0) {
+    container.innerHTML = '<div class="text-center text-gray-400 py-16"><span class="material-icons text-6xl mb-4 text-gray-500">code_off</span><p class="text-lg">No snippets yet</p><p class="text-sm mt-2">Create your first code snippet!</p></div>';
+    return;
+  }
+
+  container.innerHTML = codeSnippets.map(snippet => `
+    <div class="group bg-dark-200/50 backdrop-blur-sm border border-dark-100/50 hover:border-primary/30 rounded-xl p-4 transition-all hover:shadow-lg hover:shadow-primary/10">
+      <div class="flex items-start justify-between mb-3">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-icons text-xl text-primary">code</span>
+            <span class="font-semibold text-primary">${snippet.name}</span>
+            ${snippet.language ? `<span class="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded text-xs font-mono">${snippet.language}</span>` : ''}
+          </div>
+          ${snippet.description ? `<p class="text-sm text-gray-400 mb-2">${snippet.description}</p>` : ''}
+          <div class="text-xs text-gray-500">
+            Created ${new Date(snippet.created_at).toLocaleDateString()}${snippet.updated_at !== snippet.created_at ? ` • Updated ${new Date(snippet.updated_at).toLocaleDateString()}` : ''}
+          </div>
+        </div>
+        <div class="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button class="copy-snippet-btn px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400 rounded-lg text-sm font-semibold transition-all hover:scale-105" data-id="${snippet.id}">Copy</button>
+          <button class="edit-snippet-btn px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 text-blue-400 rounded-lg text-sm font-semibold transition-all hover:scale-105" data-id="${snippet.id}">Edit</button>
+          <button class="delete-snippet-btn px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 rounded-lg text-sm font-semibold transition-all hover:scale-105" data-id="${snippet.id}">Delete</button>
+        </div>
+      </div>
+      <div class="bg-dark-400 border border-dark-100 rounded-lg p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-32 overflow-y-auto">
+        <pre>${snippet.content.split('\n').slice(0, 5).join('\n')}${snippet.content.split('\n').length > 5 ? '\n...' : ''}</pre>
+      </div>
+    </div>
+  `).join('');
+
+  attachSnippetEventHandlers();
+}
+
+function attachSnippetEventHandlers() {
+  // Copy buttons
+  document.querySelectorAll('.copy-snippet-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const snippet = codeSnippets.find(s => s.id == btn.dataset.id);
+      try {
+        await navigator.clipboard.writeText(snippet.content);
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('bg-green-600/30');
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove('bg-green-600/30');
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy snippet:', err);
+        alert('Failed to copy to clipboard');
+      }
+    });
+  });
+
+  // Edit buttons
+  document.querySelectorAll('.edit-snippet-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const snippet = codeSnippets.find(s => s.id == btn.dataset.id);
+      showEditSnippetModal(snippet);
+    });
+  });
+
+  // Delete buttons
+  document.querySelectorAll('.delete-snippet-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const snippet = codeSnippets.find(s => s.id == btn.dataset.id);
+      if (confirm(`Delete snippet "${snippet.name}"?`)) {
+        try {
+          const res = await fetch(`/api/snippets/${snippet.id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            throw new Error('Failed to delete snippet');
+          }
+          loadSnippets();
+        } catch (err) {
+          console.error('Error deleting snippet:', err);
+          alert('Failed to delete snippet');
+        }
+      }
+    });
+  });
+}
+
+// Snippets modal handlers
+document.getElementById('snippets-btn').addEventListener('click', () => {
+  showModal('snippets-modal');
+  loadSnippets();
+});
+
+document.getElementById('close-snippets-btn').addEventListener('click', () => {
+  hideModal('snippets-modal');
+});
+
+document.getElementById('add-snippet-btn').addEventListener('click', () => {
+  hideModal('snippets-modal');
+  showAddSnippetModal();
+});
+
+document.getElementById('cancel-snippet-btn').addEventListener('click', () => {
+  hideModal('snippet-form-modal');
+  document.getElementById('snippet-form').reset();
+});
+
+// Snippet form submit
+document.getElementById('snippet-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const snippetId = document.getElementById('snippet-id').value;
+  const data = {
+    name: document.getElementById('snippet-name').value,
+    content: document.getElementById('snippet-content').value,
+    description: document.getElementById('snippet-description').value,
+    language: document.getElementById('snippet-language').value
+  };
+
+  try {
+    const method = snippetId ? 'PUT' : 'POST';
+    const url = snippetId ? `/api/snippets/${snippetId}` : '/api/snippets';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to save snippet');
+    }
+
+    hideModal('snippet-form-modal');
+    document.getElementById('snippet-form').reset();
+    loadSnippets();
+    alert(`Snippet ${snippetId ? 'updated' : 'created'} successfully!`);
+  } catch (err) {
+    console.error('Error saving snippet:', err);
+    alert(err.message);
+  }
+});
+
+function showAddSnippetModal() {
+  document.getElementById('snippet-modal-title').textContent = 'New Snippet';
+  document.getElementById('snippet-id').value = '';
+  document.getElementById('snippet-form').reset();
+  showModal('snippet-form-modal');
+}
+
+function showEditSnippetModal(snippet) {
+  document.getElementById('snippet-modal-title').textContent = 'Edit Snippet';
+  document.getElementById('snippet-id').value = snippet.id;
+  document.getElementById('snippet-name').value = snippet.name;
+  document.getElementById('snippet-content').value = snippet.content;
+  document.getElementById('snippet-description').value = snippet.description || '';
+  document.getElementById('snippet-language').value = snippet.language || '';
+  showModal('snippet-form-modal');
+}
+
+// ========== SNIPPET DROPDOWN (RUN IN TERMINAL) ==========
+
+function showSnippetDropdown(tabId, buttonElement) {
+  // Load snippets if not loaded yet
+  if (codeSnippets.length === 0) {
+    loadSnippets();
+  }
+
+  snippetDropdownTabId = tabId;
+  const dropdown = document.getElementById('snippet-dropdown');
+
+  // Position dropdown below the button
+  const rect = buttonElement.getBoundingClientRect();
+  dropdown.style.top = `${rect.bottom + 5}px`;
+  dropdown.style.left = `${rect.left - 120}px`; // Center under button
+
+  renderSnippetDropdown();
+  dropdown.classList.remove('hidden');
+  snippetDropdownVisible = true;
+}
+
+function hideSnippetDropdown() {
+  const dropdown = document.getElementById('snippet-dropdown');
+  dropdown.classList.add('hidden');
+  snippetDropdownVisible = false;
+  snippetDropdownTabId = null;
+}
+
+function renderSnippetDropdown() {
+  const container = document.getElementById('snippet-dropdown-list');
+
+  // Filter snippets based on active filter
+  let filtered = codeSnippets;
+  if (snippetFilter === 'bash') {
+    filtered = codeSnippets.filter(s =>
+      !s.language ||
+      s.language === 'bash' ||
+      s.language === 'shell' ||
+      s.language === ''
+    );
+  }
+
+  // Sort by name
+  filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="text-center text-gray-400 py-8 px-4">
+        <span class="material-icons text-4xl mb-2 text-gray-500">code_off</span>
+        <p class="text-sm">No ${snippetFilter === 'bash' ? 'bash/shell' : ''} snippets found</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(snippet => `
+    <button class="snippet-item w-full text-left px-3 py-2 rounded-lg hover:bg-dark-200 transition-colors flex items-center justify-between group"
+            data-snippet-id="${snippet.id}">
+      <span class="text-sm text-gray-300 truncate flex-1">${snippet.name}</span>
+      ${snippet.language ? `<span class="px-2 py-0.5 bg-primary/10 border border-primary/20 rounded text-xs font-mono text-primary ml-2">${snippet.language}</span>` : ''}
+    </button>
+  `).join('');
+
+  // Attach click handlers
+  container.querySelectorAll('.snippet-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const snippetId = parseInt(btn.dataset.snippetId);
+      executeSnippet(snippetId);
+    });
+  });
+}
+
+function executeSnippet(snippetId) {
+  const snippet = codeSnippets.find(s => s.id === snippetId);
+  if (!snippet) return;
+
+  const tab = tabs.get(snippetDropdownTabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) {
+    alert('Terminal connection not ready');
+    return;
+  }
+
+  // Send snippet content to terminal (with \n preserved)
+  tab.ws.send(JSON.stringify({
+    type: 'input',
+    data: snippet.content
+  }));
+
+  hideSnippetDropdown();
+}
+
+function updateFilterButtons() {
+  const bashBtn = document.getElementById('filter-bash');
+  const allBtn = document.getElementById('filter-all');
+
+  if (snippetFilter === 'bash') {
+    bashBtn.classList.add('bg-primary/20', 'text-primary', 'border-primary/30');
+    bashBtn.classList.remove('bg-dark-200', 'text-gray-400');
+    allBtn.classList.remove('bg-primary/20', 'text-primary', 'border-primary/30');
+    allBtn.classList.add('bg-dark-200', 'text-gray-400');
+  } else {
+    allBtn.classList.add('bg-primary/20', 'text-primary', 'border-primary/30');
+    allBtn.classList.remove('bg-dark-200', 'text-gray-400');
+    bashBtn.classList.remove('bg-primary/20', 'text-primary', 'border-primary/30');
+    bashBtn.classList.add('bg-dark-200', 'text-gray-400');
+  }
+}
+
+// Filter button handlers
+document.getElementById('filter-bash').addEventListener('click', () => {
+  snippetFilter = 'bash';
+  updateFilterButtons();
+  renderSnippetDropdown();
+});
+
+document.getElementById('filter-all').addEventListener('click', () => {
+  snippetFilter = 'all';
+  updateFilterButtons();
+  renderSnippetDropdown();
+});
+
+// Close dropdown on click outside
+document.addEventListener('click', (e) => {
+  if (!snippetDropdownVisible) return;
+
+  const dropdown = document.getElementById('snippet-dropdown');
+  const target = e.target;
+
+  // Don't close if clicking inside dropdown or on Run button
+  if (dropdown.contains(target) || target.closest('.run-snippet-btn')) {
+    return;
+  }
+
+  hideSnippetDropdown();
+});
+
+// Close dropdown on ESC key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && snippetDropdownVisible) {
+    hideSnippetDropdown();
+  }
+});
+
+// ========== SPLIT SCREEN MODE ==========
+
+function toggleSplitMode() {
+  if (splitMode) {
+    exitSplitMode();
+  } else {
+    enterSplitMode();
+  }
+}
+
+function enterSplitMode() {
+  const tabCount = tabs.size;
+
+  if (tabCount < 2) {
+    alert('Need at least 2 active connections for split mode');
+    return;
+  }
+
+  splitMode = true;
+
+  // Determine layout: 2 or 4 terminals
+  if (tabCount === 2) {
+    splitLayout = 2;
+    splitTerminals = Array.from(tabs.keys());
+  } else if (tabCount === 3) {
+    splitLayout = 2;
+    splitTerminals = getLastActiveTabs(2);
+  } else {
+    // 4 or more tabs
+    splitLayout = 4;
+    splitTerminals = getLastActiveTabs(4);
+  }
+
+  renderSplitLayout();
+  updateSplitIcon();
+}
+
+function exitSplitMode() {
+  splitMode = false;
+  splitLayout = 1;
+  splitTerminals = [];
+
+  // Remove separators
+  document.querySelectorAll('.split-separator').forEach(el => el.remove());
+
+  // Show only active tab
+  if (activeTabId) {
+    switchTab(activeTabId);
+  }
+
+  updateSplitIcon();
+}
+
+function getLastActiveTabs(count) {
+  return tabActivityOrder.slice(0, count);
+}
+
+function updateSplitIcon() {
+  const btn = document.getElementById('split-mode-btn');
+  const icon = btn.querySelector('.material-icons');
+
+  if (splitMode) {
+    btn.classList.add('bg-primary/20', 'border', 'border-primary/30');
+    icon.classList.add('text-primary');
+  } else {
+    btn.classList.remove('bg-primary/20', 'border', 'border-primary/30');
+    icon.classList.remove('text-primary');
+  }
+
+  // Show button only if >= 2 tabs
+  if (tabs.size >= 2) {
+    btn.classList.remove('hidden');
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
+function renderSplitLayout() {
+  const container = document.getElementById('terminals-container');
+
+  // Hide all terminals first
+  tabs.forEach((tab, id) => {
+    tab.container.classList.add('hidden');
+    tab.container.style.cssText = '';
+    tab.container.classList.remove('border-2', 'border-primary/50');
+  });
+
+  if (splitLayout === 1) {
+    return;
+  }
+
+  if (splitLayout === 2) {
+    renderTwoTerminalSplit();
+  } else if (splitLayout === 4) {
+    renderFourTerminalGrid();
+  }
+
+  createSeparator();
+  updateTerminalSizes();
+}
+
+function renderTwoTerminalSplit() {
+  const [topId, bottomId] = splitTerminals;
+  const topTab = tabs.get(topId);
+  const bottomTab = tabs.get(bottomId);
+
+  if (!topTab || !bottomTab) return;
+
+  // Position terminals
+  topTab.container.classList.remove('hidden');
+  topTab.container.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: ${separatorPosition.horizontal}%;
+    padding: 1.5rem;
+  `;
+
+  bottomTab.container.classList.remove('hidden');
+  bottomTab.container.style.cssText = `
+    position: absolute;
+    top: ${separatorPosition.horizontal}%;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 1.5rem;
+  `;
+
+  updateActiveTerminalHighlight(topId);
+}
+
+function renderFourTerminalGrid() {
+  const [tl, tr, bl, br] = splitTerminals;
+  const { horizontal, vertical } = separatorPosition;
+
+  const terminals = [
+    { id: tl, top: 0, left: 0, height: horizontal, width: vertical },
+    { id: tr, top: 0, left: vertical, height: horizontal, width: 100 - vertical },
+    { id: bl, top: horizontal, left: 0, height: 100 - horizontal, width: vertical },
+    { id: br, top: horizontal, left: vertical, height: 100 - horizontal, width: 100 - vertical }
+  ];
+
+  terminals.forEach(({ id, top, left, height, width }) => {
+    const tab = tabs.get(id);
+    if (!tab) return;
+
+    tab.container.classList.remove('hidden');
+    tab.container.style.cssText = `
+      position: absolute;
+      top: ${top}%;
+      left: ${left}%;
+      width: ${width}%;
+      height: ${height}%;
+      padding: 1.5rem;
+    `;
+  });
+
+  updateActiveTerminalHighlight(tl);
+}
+
+function updateActiveTerminalHighlight(activeId) {
+  splitTerminals.forEach(id => {
+    const tab = tabs.get(id);
+    if (!tab) return;
+
+    if (id === activeId) {
+      tab.container.classList.add('border-2', 'border-primary/50');
+    } else {
+      tab.container.classList.remove('border-2', 'border-primary/50');
+    }
+  });
+}
+
+function createSeparator() {
+  document.querySelectorAll('.split-separator').forEach(el => el.remove());
+
+  const container = document.getElementById('terminals-container');
+
+  if (splitLayout === 2) {
+    const separator = document.createElement('div');
+    separator.className = 'split-separator horizontal';
+    separator.style.cssText = `
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: ${separatorPosition.horizontal}%;
+      height: 4px;
+      background: #3b82f6;
+      cursor: ns-resize;
+      z-index: 100;
+      transform: translateY(-50%);
+    `;
+
+    separator.addEventListener('mousedown', initHorizontalDrag);
+    container.appendChild(separator);
+
+  } else if (splitLayout === 4) {
+    // Horizontal separator
+    const hSep = document.createElement('div');
+    hSep.className = 'split-separator horizontal';
+    hSep.style.cssText = `
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: ${separatorPosition.horizontal}%;
+      height: 4px;
+      background: #3b82f6;
+      cursor: ns-resize;
+      z-index: 100;
+      transform: translateY(-50%);
+    `;
+    hSep.addEventListener('mousedown', initHorizontalDrag);
+    container.appendChild(hSep);
+
+    // Vertical separator
+    const vSep = document.createElement('div');
+    vSep.className = 'split-separator vertical';
+    vSep.style.cssText = `
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: ${separatorPosition.vertical}%;
+      width: 4px;
+      background: #3b82f6;
+      cursor: ew-resize;
+      z-index: 100;
+      transform: translateX(-50%);
+    `;
+    vSep.addEventListener('mousedown', initVerticalDrag);
+    container.appendChild(vSep);
+  }
+}
+
+function initHorizontalDrag(e) {
+  e.preventDefault();
+
+  const container = document.getElementById('terminals-container');
+  const rect = container.getBoundingClientRect();
+
+  function onMouseMove(e) {
+    const y = e.clientY - rect.top;
+    const percent = (y / rect.height) * 100;
+
+    separatorPosition.horizontal = Math.max(20, Math.min(80, percent));
+    renderSplitLayout();
+  }
+
+  function onMouseUp() {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function initVerticalDrag(e) {
+  e.preventDefault();
+
+  const container = document.getElementById('terminals-container');
+  const rect = container.getBoundingClientRect();
+
+  function onMouseMove(e) {
+    const x = e.clientX - rect.left;
+    const percent = (x / rect.width) * 100;
+
+    separatorPosition.vertical = Math.max(20, Math.min(80, percent));
+    renderSplitLayout();
+  }
+
+  function onMouseUp() {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function updateTerminalSizes() {
+  splitTerminals.forEach(id => {
+    const tab = tabs.get(id);
+    if (tab && tab.fitAddon) {
+      setTimeout(() => {
+        try {
+          tab.fitAddon.fit();
+
+          if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+            tab.ws.send(JSON.stringify({
+              type: 'resize',
+              rows: tab.terminal.rows,
+              cols: tab.terminal.cols
+            }));
+          }
+        } catch (err) {
+          console.error('Error fitting terminal:', err);
+        }
+      }, 100);
+    }
+  });
+}
+
+function handleTabClickInSplitMode(tabId) {
+  if (splitTerminals.includes(tabId)) {
+    // Tab already visible - exit split mode and show single view
+    exitSplitMode();
+    switchTab(tabId);
+  } else {
+    // Replace TOP terminal with clicked tab
+    splitTerminals[0] = tabId;
+    updateTabActivity(tabId);
+    renderSplitLayout();
+  }
+}
+
+// Split mode button click
+document.getElementById('split-mode-btn').addEventListener('click', toggleSplitMode);
 
 // ========== PROFILE MANAGEMENT ==========
 

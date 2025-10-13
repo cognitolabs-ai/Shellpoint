@@ -62,6 +62,18 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (key_id) REFERENCES ssh_keys(id) ON DELETE SET NULL
   );
+
+  CREATE TABLE IF NOT EXISTS code_snippets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    description TEXT,
+    language TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 // Migration: Add theme column if it doesn't exist
@@ -323,12 +335,80 @@ app.post('/api/keys', authenticateToken, (req, res) => {
 app.delete('/api/keys/:id', authenticateToken, (req, res) => {
   // Check if key is in use
   const inUse = db.prepare('SELECT COUNT(*) as count FROM connections WHERE key_id = ? AND user_id = ?').get(req.params.id, req.user.id);
-  
+
   if (inUse.count > 0) {
     return res.status(400).json({ error: `Key is used in ${inUse.count} connection(s)` });
   }
-  
+
   const stmt = db.prepare('DELETE FROM ssh_keys WHERE id = ? AND user_id = ?');
+  stmt.run(req.params.id, req.user.id);
+  res.json({ success: true });
+});
+
+// Code Snippets endpoints
+app.get('/api/snippets', authenticateToken, (req, res) => {
+  const snippets = db.prepare(`
+    SELECT id, name, description, language, content, created_at, updated_at
+    FROM code_snippets
+    WHERE user_id = ?
+    ORDER BY updated_at DESC
+  `).all(req.user.id);
+  res.json(snippets);
+});
+
+app.post('/api/snippets', authenticateToken, (req, res) => {
+  try {
+    const { name, content, description, language } = req.body;
+
+    if (!name || !content) {
+      return res.status(400).json({ error: 'Name and content required' });
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO code_snippets (user_id, name, content, description, language)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(req.user.id, name, content, description || null, language || null);
+
+    const snippet = db.prepare(`
+      SELECT id, name, description, language, content, created_at, updated_at
+      FROM code_snippets WHERE id = ?
+    `).get(result.lastInsertRowid);
+    res.json(snippet);
+  } catch (err) {
+    console.error('Snippet creation error:', err);
+    res.status(500).json({ error: 'Failed to create snippet' });
+  }
+});
+
+app.put('/api/snippets/:id', authenticateToken, (req, res) => {
+  try {
+    const { name, content, description, language } = req.body;
+
+    if (!name || !content) {
+      return res.status(400).json({ error: 'Name and content required' });
+    }
+
+    const stmt = db.prepare(`
+      UPDATE code_snippets
+      SET name = ?, content = ?, description = ?, language = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND user_id = ?
+    `);
+    stmt.run(name, content, description || null, language || null, req.params.id, req.user.id);
+
+    const snippet = db.prepare(`
+      SELECT id, name, description, language, content, created_at, updated_at
+      FROM code_snippets WHERE id = ?
+    `).get(req.params.id);
+    res.json(snippet);
+  } catch (err) {
+    console.error('Snippet update error:', err);
+    res.status(500).json({ error: 'Failed to update snippet' });
+  }
+});
+
+app.delete('/api/snippets/:id', authenticateToken, (req, res) => {
+  const stmt = db.prepare('DELETE FROM code_snippets WHERE id = ? AND user_id = ?');
   stmt.run(req.params.id, req.user.id);
   res.json({ success: true });
 });

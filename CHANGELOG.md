@@ -5,6 +5,70 @@ All notable changes to ShellPoint will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-10-13
+
+### Added
+- **Code Snippets Feature**
+  - Save, manage, and execute reusable code snippets and scripts
+  - Full CRUD operations (Create, Read, Update, Delete)
+  - Snippet fields: name, content, description (optional), language (optional)
+  - Copy to clipboard functionality
+  - Snippet library modal with search and organization
+  - Real-time execution in any terminal tab via play button
+  - Smart filtering: Bash/Shell filter (default) and All snippets view
+  - Material Design UI with smooth animations
+
+- **Split Screen Mode**
+  - View and work with multiple terminals simultaneously
+  - Automatic layout selection based on active connection count:
+    - 2 terminals: Top-bottom horizontal split
+    - 4 terminals: 2×2 grid layout
+  - Smart tab selection using activity tracking (last active tabs)
+  - Draggable separators for custom terminal sizing
+    - 2 terminals: Horizontal separator
+    - 4 terminals: Crosshair separator (H+V linked)
+    - 20-80% movement constraint to prevent unusable sizes
+  - Active terminal visual highlighting with border
+  - Grid icon button (auto-shows when ≥2 tabs)
+  - Tab switching within split mode (replaces top terminal)
+  - Auto-exit when closing displayed tabs
+  - Full window resize support for all visible terminals
+
+- **Terminal Tab Enhancements**
+  - Play button on each tab for quick snippet execution
+  - Activity order tracking for intelligent tab management
+  - Improved tab switching behavior in split mode
+
+- **API Endpoints**
+  - GET `/api/snippets` - List all code snippets
+  - POST `/api/snippets` - Create new snippet
+  - PUT `/api/snippets/:id` - Update snippet
+  - DELETE `/api/snippets/:id` - Delete snippet
+
+- **Database Schema**
+  - New `code_snippets` table with user relationships
+  - Fields: id, user_id, name, content, description, language, timestamps
+  - Foreign key constraints with cascade delete
+
+### Changed
+- Enhanced API documentation with Code Snippets endpoints and UI Features section
+- Updated terminal resize handler to support split screen mode
+- Improved tab management with activity tracking
+- Tab UI now includes snippet execution button
+
+### Fixed
+- Terminal resize issues in split screen layouts
+- Tab close behavior when in split mode
+- Icon visibility logic for split mode button
+
+### UI/UX Improvements
+- Snippet dropdown with Material Design
+- Filter buttons for snippet selection
+- Visual feedback for active terminals in split mode
+- Smooth transitions for split mode activation/deactivation
+- Keyboard shortcuts (ESC to close dropdowns)
+- Click-outside handling for better UX
+
 ## [1.1.0] - 2025-10-13
 
 ### Added
@@ -203,6 +267,27 @@ This release focuses on making ShellPoint production-ready with comprehensive do
 ---
 
 ## Release Notes
+
+### Version 1.2.0 - Productivity Features Release
+
+ShellPoint 1.2.0 introduces powerful productivity features that enhance workflow efficiency:
+
+- **Code Snippets Management**: Save, organize, and execute reusable scripts and commands directly in terminals. Perfect for repetitive tasks, complex commands, and deployment scripts.
+
+- **Split Screen Mode**: Work with multiple SSH sessions simultaneously in a split-screen layout. Automatic intelligent layout selection (2 or 4 terminals) with draggable separators for customization.
+
+- **Enhanced Terminal Experience**: Quick snippet execution via play button on each tab, smart tab management with activity tracking, and seamless split-mode integration.
+
+This release focuses on developer productivity, enabling faster workflows and better multitasking capabilities for DevOps professionals and system administrators.
+
+**Key Highlights:**
+- ~780 lines of new code across frontend and backend
+- 4 new REST API endpoints for snippet management
+- Real-time snippet execution in terminals
+- Intelligent split-screen layouts with draggable separators
+- Material Design UI components with smooth animations
+
+**Docker Image:** `ghcr.io/cognitiolabs/shellpoint:1.2.0`
 
 ### Version 1.1.0 - Documentation Release
 

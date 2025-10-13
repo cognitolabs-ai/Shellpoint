@@ -374,6 +374,112 @@ Deletes an SSH key from the vault.
 
 ---
 
+## Code Snippets Endpoints
+
+### List Code Snippets
+**GET** `/snippets` 🔒
+
+Returns all code snippets for the authenticated user.
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": 1,
+    "name": "Server Health Check",
+    "content": "#!/bin/bash\ndf -h\nfree -m\nuptime",
+    "description": "Quick server health diagnostics",
+    "language": "bash",
+    "created_at": "2025-10-10T12:00:00.000Z",
+    "updated_at": "2025-10-10T12:00:00.000Z"
+  },
+  {
+    "id": 2,
+    "name": "Git Status",
+    "content": "git status\ngit log --oneline -5",
+    "description": "Check git repository status",
+    "language": "shell",
+    "created_at": "2025-10-10T13:00:00.000Z",
+    "updated_at": "2025-10-10T13:00:00.000Z"
+  }
+]
+```
+
+---
+
+### Create Code Snippet
+**POST** `/snippets` 🔒
+
+Creates a new code snippet.
+
+**Request Body:**
+```json
+{
+  "name": "Server Health Check",
+  "content": "#!/bin/bash\ndf -h\nfree -m\nuptime",
+  "description": "Quick server health diagnostics",
+  "language": "bash"
+}
+```
+
+**Validation:**
+- `name`: Required
+- `content`: Required
+- `description`: Optional
+- `language`: Optional (e.g., `bash`, `shell`, `python`, `javascript`)
+
+**Response (201 Created):**
+```json
+{
+  "id": 1,
+  "name": "Server Health Check",
+  "content": "#!/bin/bash\ndf -h\nfree -m\nuptime",
+  "description": "Quick server health diagnostics",
+  "language": "bash",
+  "created_at": "2025-10-10T12:00:00.000Z",
+  "updated_at": "2025-10-10T12:00:00.000Z"
+}
+```
+
+**Errors:**
+- `400 Bad Request`: Missing name or content
+- `500 Internal Server Error`: Failed to create snippet
+
+---
+
+### Update Code Snippet
+**PUT** `/snippets/:id` 🔒
+
+Updates an existing code snippet.
+
+**Request Body:** Same as Create Code Snippet
+
+**Response (200 OK):** Same as Create Code Snippet
+
+**Errors:**
+- `400 Bad Request`: Missing required fields
+- `404 Not Found`: Snippet not found or doesn't belong to user
+- `500 Internal Server Error`: Failed to update snippet
+
+---
+
+### Delete Code Snippet
+**DELETE** `/snippets/:id` 🔒
+
+Deletes a code snippet.
+
+**Response (200 OK):**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `404 Not Found`: Snippet not found or doesn't belong to user
+
+---
+
 ## WebSocket Protocol
 
 ### Connection
@@ -529,6 +635,96 @@ ws.send(JSON.stringify({
   data: 'ls -la\n'
 }));
 ```
+
+---
+
+## UI Features
+
+### Split Screen Mode
+
+**Feature**: View and work with multiple terminals simultaneously in split screen layout.
+
+**Activation**:
+- Click the grid icon (`grid_view`) in the tabs bar when 2 or more connections are active
+- The icon automatically appears/disappears based on the number of active tabs
+
+**Layouts**:
+- **2 terminals**: Top-bottom horizontal split
+- **4 terminals**: 2×2 grid layout
+
+**Smart Tab Selection**:
+- Automatically selects the last 2 or 4 active tabs based on recent usage
+- Active terminal is highlighted with a blue border
+
+**Interaction**:
+- **Tab Switching**: Click any tab to replace the top terminal with that connection
+- **Draggable Separators**:
+  - 2 terminals: Horizontal separator (top-bottom)
+  - 4 terminals: Crosshair separator (moves both horizontal and vertical together)
+  - Separators are constrained between 20-80% to prevent terminals from becoming too small
+- **Exit Split Mode**: Click the grid icon again, or click on a tab that's already visible
+
+**Auto-Exit**:
+- Closing a tab that's currently displayed in split mode automatically exits split mode
+- Icon hides when fewer than 2 tabs remain
+
+**Terminal Resizing**:
+- All visible terminals automatically resize when window is resized
+- xterm.js fit addon ensures proper terminal dimensions
+
+### Code Snippet Execution
+
+**Feature**: Execute saved code snippets directly in any terminal tab.
+
+**Usage**:
+1. Click the play icon (`play_circle`) on any terminal tab
+2. A dropdown appears with available snippets
+3. Click a snippet to paste its content into the terminal
+
+**Filtering**:
+- **Bash/Shell Filter** (default): Shows only bash and shell snippets
+- **All Filter**: Shows all snippets regardless of language
+- Filter toggles are in the dropdown header
+
+**Snippet Display**:
+- Snippet name is displayed
+- Language tag is shown (if specified)
+- Snippets are sorted alphabetically by name
+
+**Execution**:
+- Entire snippet content is sent to the terminal as one string (preserves `\n` line breaks)
+- Content appears in the terminal ready for review and execution
+- User can edit before pressing Enter
+
+**Keyboard Shortcuts**:
+- `ESC`: Close the snippet dropdown
+- Click outside dropdown: Auto-close
+
+**Visual Design**:
+- Material Design dropdown with rounded corners
+- Hover effects on snippet items
+- Active filter button is highlighted
+
+### Code Snippet Management
+
+**Access**: Click the code icon (`code`) in the sidebar to open the snippets library.
+
+**Operations**:
+- **Create**: Add new snippet with name, content, optional description and language
+- **Edit**: Modify existing snippet details
+- **Delete**: Remove snippet from library
+- **Copy**: Copy snippet content to clipboard
+
+**Fields**:
+- **Name** (required): Display name for the snippet
+- **Content** (required): The actual code or script content
+- **Description** (optional): Brief description of what the snippet does
+- **Language** (optional): Programming/scripting language (bash, shell, python, javascript, etc.)
+
+**Preview**:
+- Snippet content is displayed with syntax highlighting
+- Long snippets show first 5 lines with "..." indicator
+- Metadata includes creation and last update timestamps
 
 ---
 
