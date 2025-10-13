@@ -1,6 +1,6 @@
 {
   "name": "shellpoint",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Professional web-based SSH client with modern UI and advanced features",
   "main": "server.js",
   "author": "CognitioLabs <info@cognitiolabs.eu>",
