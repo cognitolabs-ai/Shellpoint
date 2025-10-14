@@ -74,6 +74,22 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS local_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL,
+    type TEXT NOT NULL,
+    size INTEGER DEFAULT 0,
+    content BLOB,
+    mime_type TEXT,
+    parent_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES local_files(id) ON DELETE CASCADE
+  );
 `);
 
 // Migration: Add theme column if it doesn't exist
@@ -93,6 +109,26 @@ try {
   console.log('Added description column to connections table');
 } catch (err) {
   // Column already exists, ignore error
+  if (!err.message.includes('duplicate column name')) {
+    console.error('Migration error:', err);
+  }
+}
+
+// Migration: Add connection_type column to connections
+try {
+  db.exec(`ALTER TABLE connections ADD COLUMN connection_type TEXT DEFAULT 'ssh'`);
+  console.log('Added connection_type column to connections table');
+} catch (err) {
+  if (!err.message.includes('duplicate column name')) {
+    console.error('Migration error:', err);
+  }
+}
+
+// Migration: Add initial_path column for SFTP connections
+try {
+  db.exec(`ALTER TABLE connections ADD COLUMN initial_path TEXT`);
+  console.log('Added initial_path column to connections table');
+} catch (err) {
   if (!err.message.includes('duplicate column name')) {
     console.error('Migration error:', err);
   }
@@ -416,7 +452,7 @@ app.delete('/api/snippets/:id', authenticateToken, (req, res) => {
 // Connection endpoints (protected)
 app.get('/api/connections', authenticateToken, (req, res) => {
   const connections = db.prepare(`
-    SELECT c.id, c.name, c.host, c.port, c.username, c.auth_type, c.key_id, c.description, c.created_at,
+    SELECT c.id, c.name, c.host, c.port, c.username, c.auth_type, c.key_id, c.description, c.connection_type, c.initial_path, c.created_at,
            k.name as key_name
     FROM connections c
     LEFT JOIN ssh_keys k ON c.key_id = k.id
@@ -428,7 +464,7 @@ app.get('/api/connections', authenticateToken, (req, res) => {
 
 app.post('/api/connections', authenticateToken, (req, res) => {
   try {
-    const { name, host, port, username, auth_type, password, key_id, description } = req.body;
+    const { name, host, port, username, auth_type, password, key_id, description, connection_type, initial_path } = req.body;
 
     // Validate required fields
     if (!name || !host || !username) {
@@ -446,16 +482,17 @@ app.post('/api/connections', authenticateToken, (req, res) => {
     }
 
     const stmt = db.prepare(`
-      INSERT INTO connections (user_id, name, host, port, username, auth_type, password, key_id, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO connections (user_id, name, host, port, username, auth_type, password, key_id, description, connection_type, initial_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       req.user.id, name, host, port || 22, username,
-      auth_type || 'password', password, key_id, description || null
+      auth_type || 'password', password, key_id, description || null,
+      connection_type || 'ssh', initial_path || null
     );
 
     const connection = db.prepare(`
-      SELECT c.id, c.name, c.host, c.port, c.username, c.auth_type, c.key_id, c.description, c.created_at,
+      SELECT c.id, c.name, c.host, c.port, c.username, c.auth_type, c.key_id, c.description, c.connection_type, c.initial_path, c.created_at,
              k.name as key_name
       FROM connections c
       LEFT JOIN ssh_keys k ON c.key_id = k.id
@@ -470,7 +507,7 @@ app.post('/api/connections', authenticateToken, (req, res) => {
 
 app.put('/api/connections/:id', authenticateToken, (req, res) => {
   try {
-    const { name, host, port, username, auth_type, password, key_id, description } = req.body;
+    const { name, host, port, username, auth_type, password, key_id, description, connection_type, initial_path } = req.body;
 
     // Validate required fields
     if (!name || !host || !username) {
@@ -492,30 +529,30 @@ app.put('/api/connections/:id', authenticateToken, (req, res) => {
       if (password) {
         const stmt = db.prepare(`
           UPDATE connections
-          SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, password = ?, key_id = NULL, description = ?
+          SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, password = ?, key_id = NULL, description = ?, connection_type = ?, initial_path = ?
           WHERE id = ? AND user_id = ?
         `);
-        stmt.run(name, host, port || 22, username, auth_type, password, description || null, req.params.id, req.user.id);
+        stmt.run(name, host, port || 22, username, auth_type, password, description || null, connection_type || 'ssh', initial_path || null, req.params.id, req.user.id);
       } else {
         const stmt = db.prepare(`
           UPDATE connections
-          SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, key_id = NULL, description = ?
+          SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, key_id = NULL, description = ?, connection_type = ?, initial_path = ?
           WHERE id = ? AND user_id = ?
         `);
-        stmt.run(name, host, port || 22, username, auth_type, description || null, req.params.id, req.user.id);
+        stmt.run(name, host, port || 22, username, auth_type, description || null, connection_type || 'ssh', initial_path || null, req.params.id, req.user.id);
       }
     } else {
       // SSH key auth
       const stmt = db.prepare(`
         UPDATE connections
-        SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, key_id = ?, password = NULL, description = ?
+        SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, key_id = ?, password = NULL, description = ?, connection_type = ?, initial_path = ?
         WHERE id = ? AND user_id = ?
       `);
-      stmt.run(name, host, port || 22, username, auth_type, key_id, description || null, req.params.id, req.user.id);
+      stmt.run(name, host, port || 22, username, auth_type, key_id, description || null, connection_type || 'ssh', initial_path || null, req.params.id, req.user.id);
     }
 
     const connection = db.prepare(`
-      SELECT c.id, c.name, c.host, c.port, c.username, c.auth_type, c.key_id, c.description, c.created_at,
+      SELECT c.id, c.name, c.host, c.port, c.username, c.auth_type, c.key_id, c.description, c.connection_type, c.initial_path, c.created_at,
              k.name as key_name
       FROM connections c
       LEFT JOIN ssh_keys k ON c.key_id = k.id
@@ -532,6 +569,166 @@ app.delete('/api/connections/:id', authenticateToken, (req, res) => {
   const stmt = db.prepare('DELETE FROM connections WHERE id = ? AND user_id = ?');
   stmt.run(req.params.id, req.user.id);
   res.json({ success: true });
+});
+
+// Local Files endpoints (for fake local file system)
+app.get('/api/local-files', authenticateToken, (req, res) => {
+  try {
+    const { path } = req.query;
+    let files;
+
+    if (path && path !== '/') {
+      // Get files in specific path
+      const parent = db.prepare('SELECT id FROM local_files WHERE path = ? AND user_id = ? AND type = ?').get(path, req.user.id, 'directory');
+      if (parent) {
+        files = db.prepare('SELECT * FROM local_files WHERE parent_id = ? AND user_id = ? ORDER BY type DESC, name ASC').all(parent.id, req.user.id);
+      } else {
+        files = [];
+      }
+    } else {
+      // Get root level files
+      files = db.prepare('SELECT * FROM local_files WHERE parent_id IS NULL AND user_id = ? ORDER BY type DESC, name ASC').all(req.user.id);
+    }
+
+    // Don't send content in list view
+    files = files.map(({ content, ...file }) => file);
+    res.json(files);
+  } catch (err) {
+    console.error('Local files list error:', err);
+    res.status(500).json({ error: 'Failed to list local files' });
+  }
+});
+
+app.get('/api/local-files/:id', authenticateToken, (req, res) => {
+  try {
+    const file = db.prepare('SELECT * FROM local_files WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    res.json(file);
+  } catch (err) {
+    console.error('Local file get error:', err);
+    res.status(500).json({ error: 'Failed to get file' });
+  }
+});
+
+app.get('/api/local-files/:id/content', authenticateToken, (req, res) => {
+  try {
+    const file = db.prepare('SELECT content, mime_type, name FROM local_files WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    if (file.content) {
+      res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+      res.send(file.content);
+    } else {
+      res.status(404).json({ error: 'No content available' });
+    }
+  } catch (err) {
+    console.error('Local file content error:', err);
+    res.status(500).json({ error: 'Failed to get file content' });
+  }
+});
+
+app.post('/api/local-files', authenticateToken, async (req, res) => {
+  try {
+    const { name, path, type, content, mime_type, parent_id } = req.body;
+
+    if (!name || !type) {
+      return res.status(400).json({ error: 'Name and type are required' });
+    }
+
+    const fullPath = path || (parent_id ? null : '/');
+    const size = content ? Buffer.byteLength(content, 'utf8') : 0;
+
+    const stmt = db.prepare(`
+      INSERT INTO local_files (user_id, name, path, type, size, content, mime_type, parent_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      req.user.id,
+      name,
+      fullPath || `${path}/${name}`,
+      type,
+      size,
+      content ? Buffer.from(content) : null,
+      mime_type || 'text/plain',
+      parent_id || null
+    );
+
+    const file = db.prepare('SELECT * FROM local_files WHERE id = ?').get(result.lastInsertRowid);
+    const { content: _, ...fileWithoutContent } = file;
+    res.json(fileWithoutContent);
+  } catch (err) {
+    console.error('Local file creation error:', err);
+    res.status(500).json({ error: 'Failed to create file' });
+  }
+});
+
+app.put('/api/local-files/:id', authenticateToken, (req, res) => {
+  try {
+    const { name, content, mime_type } = req.body;
+
+    const file = db.prepare('SELECT * FROM local_files WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const size = content ? Buffer.byteLength(content, 'utf8') : file.size;
+    const updates = [];
+    const values = [];
+
+    if (name) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (content !== undefined) {
+      updates.push('content = ?', 'size = ?');
+      values.push(Buffer.from(content), size);
+    }
+    if (mime_type) {
+      updates.push('mime_type = ?');
+      values.push(mime_type);
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(req.params.id, req.user.id);
+
+    const stmt = db.prepare(`
+      UPDATE local_files
+      SET ${updates.join(', ')}
+      WHERE id = ? AND user_id = ?
+    `);
+    stmt.run(...values);
+
+    const updated = db.prepare('SELECT * FROM local_files WHERE id = ?').get(req.params.id);
+    const { content: _, ...fileWithoutContent } = updated;
+    res.json(fileWithoutContent);
+  } catch (err) {
+    console.error('Local file update error:', err);
+    res.status(500).json({ error: 'Failed to update file' });
+  }
+});
+
+app.delete('/api/local-files/:id', authenticateToken, (req, res) => {
+  try {
+    const file = db.prepare('SELECT type FROM local_files WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // If directory, delete recursively (CASCADE will handle this)
+    const stmt = db.prepare('DELETE FROM local_files WHERE id = ? AND user_id = ?');
+    stmt.run(req.params.id, req.user.id);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Local file delete error:', err);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
 });
 
 // WebSocket SSH handler
@@ -556,6 +753,8 @@ wss.on('connection', (ws, req) => {
 
   let sshClient = null;
   let stream = null;
+  let sftpSession = null;
+  let connectionType = null;
   const sessionId = Date.now().toString();
 
   ws.on('message', async (message) => {
@@ -565,52 +764,90 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'connect') {
         // Verify connection belongs to user
         const conn = db.prepare(`
-          SELECT c.*, k.private_key, k.passphrase 
+          SELECT c.*, k.private_key, k.passphrase
           FROM connections c
           LEFT JOIN ssh_keys k ON c.key_id = k.id
           WHERE c.id = ? AND c.user_id = ?
         `).get(data.connectionId, user.id);
-        
+
         if (!conn) {
           ws.send(JSON.stringify({ type: 'error', message: 'Connection not found' }));
           return;
         }
 
+        connectionType = conn.connection_type || 'ssh';
+
         // Initialize SSH connection
         sshClient = new Client();
         
         sshClient.on('ready', () => {
-          console.log('SSH connection ready');
+          console.log(`${connectionType.toUpperCase()} connection ready`);
           ws.send(JSON.stringify({ type: 'status', message: 'Connected' }));
-          
-          sshClient.shell({ term: 'xterm-256color' }, (err, channel) => {
-            if (err) {
-              ws.send(JSON.stringify({ type: 'error', message: err.message }));
-              return;
-            }
 
-            stream = channel;
-            sessions.set(sessionId, { client: sshClient, stream, userId: user.id });
+          if (connectionType === 'sftp') {
+            // Open SFTP session
+            sshClient.sftp((err, sftp) => {
+              if (err) {
+                ws.send(JSON.stringify({ type: 'error', message: err.message }));
+                return;
+              }
 
-            channel.on('data', (data) => {
-              ws.send(JSON.stringify({ 
-                type: 'data', 
-                data: data.toString('utf8') 
-              }));
+              sftpSession = sftp;
+              sessions.set(sessionId, { client: sshClient, sftp: sftpSession, userId: user.id, type: 'sftp' });
+
+              // Send initial directory (home directory or configured path)
+              const initialPath = conn.initial_path || '.';
+              sftp.readdir(initialPath, (err, list) => {
+                if (err) {
+                  ws.send(JSON.stringify({ type: 'sftp-error', message: err.message }));
+                } else {
+                  ws.send(JSON.stringify({
+                    type: 'sftp-list',
+                    path: initialPath,
+                    files: list.map(file => ({
+                      name: file.filename,
+                      type: file.longname.startsWith('d') ? 'directory' : 'file',
+                      size: file.attrs.size,
+                      permissions: file.attrs.permissions,
+                      modified: file.attrs.mtime * 1000,
+                      owner: file.attrs.uid,
+                      group: file.attrs.gid
+                    }))
+                  }));
+                }
+              });
             });
+          } else {
+            // Open SSH shell
+            sshClient.shell({ term: 'xterm-256color' }, (err, channel) => {
+              if (err) {
+                ws.send(JSON.stringify({ type: 'error', message: err.message }));
+                return;
+              }
 
-            channel.on('close', () => {
-              ws.send(JSON.stringify({ type: 'status', message: 'Disconnected' }));
-              cleanup();
-            });
+              stream = channel;
+              sessions.set(sessionId, { client: sshClient, stream, userId: user.id, type: 'ssh' });
 
-            channel.stderr.on('data', (data) => {
-              ws.send(JSON.stringify({ 
-                type: 'data', 
-                data: data.toString('utf8') 
-              }));
+              channel.on('data', (data) => {
+                ws.send(JSON.stringify({
+                  type: 'data',
+                  data: data.toString('utf8')
+                }));
+              });
+
+              channel.on('close', () => {
+                ws.send(JSON.stringify({ type: 'status', message: 'Disconnected' }));
+                cleanup();
+              });
+
+              channel.stderr.on('data', (data) => {
+                ws.send(JSON.stringify({
+                  type: 'data',
+                  data: data.toString('utf8')
+                }));
+              });
             });
-          });
+          }
         });
 
         sshClient.on('error', (err) => {
@@ -645,7 +882,7 @@ wss.on('connection', (ws, req) => {
         }
 
         sshClient.connect(config);
-      } 
+      }
       else if (data.type === 'input') {
         if (stream) {
           stream.write(data.data);
@@ -655,6 +892,192 @@ wss.on('connection', (ws, req) => {
         if (stream) {
           stream.setWindow(data.rows, data.cols);
         }
+      }
+      // SFTP operations
+      else if (data.type === 'sftp-list') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        sftpSession.readdir(data.path, (err, list) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'list', path: data.path }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-list',
+              path: data.path,
+              files: list.map(file => ({
+                name: file.filename,
+                type: file.longname.startsWith('d') ? 'directory' : 'file',
+                size: file.attrs.size,
+                permissions: file.attrs.permissions,
+                modified: file.attrs.mtime * 1000,
+                owner: file.attrs.uid,
+                group: file.attrs.gid
+              }))
+            }));
+          }
+        });
+      }
+      else if (data.type === 'sftp-download') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        const remotePath = data.path;
+        sftpSession.readFile(remotePath, (err, buffer) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'download', path: remotePath }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-download',
+              path: remotePath,
+              content: buffer.toString('base64'),
+              size: buffer.length
+            }));
+          }
+        });
+      }
+      else if (data.type === 'sftp-upload') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        const remotePath = data.path;
+        const content = Buffer.from(data.content, 'base64');
+
+        sftpSession.writeFile(remotePath, content, (err) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'upload', path: remotePath }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-upload',
+              path: remotePath,
+              success: true
+            }));
+          }
+        });
+      }
+      else if (data.type === 'sftp-delete') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        const remotePath = data.path;
+        const isDirectory = data.isDirectory;
+
+        if (isDirectory) {
+          sftpSession.rmdir(remotePath, (err) => {
+            if (err) {
+              ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'delete', path: remotePath }));
+            } else {
+              ws.send(JSON.stringify({
+                type: 'sftp-delete',
+                path: remotePath,
+                success: true
+              }));
+            }
+          });
+        } else {
+          sftpSession.unlink(remotePath, (err) => {
+            if (err) {
+              ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'delete', path: remotePath }));
+            } else {
+              ws.send(JSON.stringify({
+                type: 'sftp-delete',
+                path: remotePath,
+                success: true
+              }));
+            }
+          });
+        }
+      }
+      else if (data.type === 'sftp-rename') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        sftpSession.rename(data.oldPath, data.newPath, (err) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'rename', path: data.oldPath }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-rename',
+              oldPath: data.oldPath,
+              newPath: data.newPath,
+              success: true
+            }));
+          }
+        });
+      }
+      else if (data.type === 'sftp-mkdir') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        sftpSession.mkdir(data.path, (err) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'mkdir', path: data.path }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-mkdir',
+              path: data.path,
+              success: true
+            }));
+          }
+        });
+      }
+      else if (data.type === 'sftp-chmod') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        sftpSession.chmod(data.path, data.mode, (err) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'chmod', path: data.path }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-chmod',
+              path: data.path,
+              mode: data.mode,
+              success: true
+            }));
+          }
+        });
+      }
+      else if (data.type === 'sftp-stat') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        sftpSession.stat(data.path, (err, stats) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-error', message: err.message, operation: 'stat', path: data.path }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-stat',
+              path: data.path,
+              stats: {
+                size: stats.size,
+                permissions: stats.permissions,
+                modified: stats.mtime * 1000,
+                accessed: stats.atime * 1000,
+                owner: stats.uid,
+                group: stats.gid,
+                isDirectory: stats.isDirectory(),
+                isFile: stats.isFile()
+              }
+            }));
+          }
+        });
       }
     } catch (err) {
       console.error('WebSocket message error:', err);
@@ -674,6 +1097,10 @@ wss.on('connection', (ws, req) => {
       stream.end();
       stream = null;
     }
+    if (sftpSession) {
+      sftpSession.end();
+      sftpSession = null;
+    }
     if (sshClient) {
       sshClient.end();
       sshClient = null;
@@ -692,13 +1119,14 @@ server.listen(PORT, () => {
 function gracefulShutdown(signal) {
   console.log(`\nReceived ${signal}, shutting down gracefully...`);
 
-  // Close all active SSH sessions
-  sessions.forEach(({ client, stream }) => {
+  // Close all active SSH/SFTP sessions
+  sessions.forEach(({ client, stream, sftp, type }) => {
     try {
       stream?.end();
+      sftp?.end();
       client?.end();
     } catch (err) {
-      console.error('Error closing SSH session:', err);
+      console.error(`Error closing ${type || 'SSH'} session:`, err);
     }
   });
 

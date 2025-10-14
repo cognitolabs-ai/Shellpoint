@@ -195,6 +195,24 @@
           <textarea id="conn-description" rows="2" placeholder="Add a description for this connection..." class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white resize-none"></textarea>
         </div>
         <div>
+          <label class="block text-sm font-medium text-gray-300 mb-3">Connection Type</label>
+          <div class="flex gap-4 p-1 bg-dark-200/50 rounded-xl">
+            <label class="flex-1 flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer transition-all conn-type-label bg-primary/20 border border-primary/30">
+              <input type="radio" name="conn-type" value="ssh" checked class="text-primary focus:ring-primary">
+              <span class="font-medium text-primary">SSH Terminal</span>
+            </label>
+            <label class="flex-1 flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer transition-all conn-type-label hover:bg-dark-100/30">
+              <input type="radio" name="conn-type" value="sftp" class="text-primary focus:ring-primary">
+              <span class="font-medium">SFTP File Manager</span>
+            </label>
+          </div>
+        </div>
+        <div id="sftp-options-group" class="hidden">
+          <label class="block text-sm font-medium text-gray-300 mb-2">Initial Path <span class="text-gray-500">(optional)</span></label>
+          <input type="text" id="conn-initial-path" placeholder="e.g., /home/user or . for home directory" class="w-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white">
+          <p class="mt-1 text-xs text-gray-400">Starting directory for SFTP browsing (default: home directory)</p>
+        </div>
+        <div>
           <label class="block text-sm font-medium text-gray-300 mb-3">Authentication</label>
           <div class="flex gap-4 p-1 bg-dark-200/50 rounded-xl">
             <label class="flex-1 flex items-center gap-2 px-4 py-3 rounded-lg cursor-pointer transition-all auth-type-label bg-primary/20 border border-primary/30">
@@ -456,6 +474,29 @@
         label.classList.add('bg-primary/20', 'border', 'border-primary/30');
         label.querySelector('span').classList.add('text-primary');
         label.classList.remove('hover:bg-dark-100/30');
+      });
+    });
+
+    // Connection type radio styling and functionality
+    document.querySelectorAll('input[name="conn-type"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        document.querySelectorAll('.conn-type-label').forEach(label => {
+          label.classList.remove('bg-primary/20', 'border', 'border-primary/30');
+          label.querySelector('span').classList.remove('text-primary');
+          label.classList.add('hover:bg-dark-100/30');
+        });
+        const label = this.closest('.conn-type-label');
+        label.classList.add('bg-primary/20', 'border', 'border-primary/30');
+        label.querySelector('span').classList.add('text-primary');
+        label.classList.remove('hover:bg-dark-100/30');
+
+        // Show/hide SFTP options
+        const sftpOptions = document.getElementById('sftp-options-group');
+        if (this.value === 'sftp') {
+          sftpOptions.classList.remove('hidden');
+        } else {
+          sftpOptions.classList.add('hidden');
+        }
       });
     });
   </script>

@@ -716,6 +716,15 @@ window.addEventListener('resize', () => {
 });
 
 function connectSSH(conn) {
+  // Route to appropriate connection handler based on type
+  if (conn.connection_type === 'sftp') {
+    connectSFTP(conn);
+  } else {
+    connectSSHTerminal(conn);
+  }
+}
+
+function connectSSHTerminal(conn) {
   // Create new tab
   const tabId = createTab(conn.id, conn.name);
   createTabUI(tabId);
@@ -786,12 +795,31 @@ function connectSSH(conn) {
 // ========== CONNECTION MODALS ==========
 
 document.getElementById('add-connection-btn').addEventListener('click', () => {
-  document.getElementById('modal-title').textContent = 'New SSH Connection';
+  document.getElementById('modal-title').textContent = 'New Connection';
   document.getElementById('conn-id').value = '';
   document.getElementById('connection-form').reset();
+
+  // Reset connection type to SSH
+  document.querySelector('input[name="conn-type"][value="ssh"]').checked = true;
+  document.getElementById('sftp-options-group').style.display = 'none';
+
+  // Reset auth type to password
   document.querySelector('input[name="auth-type"][value="password"]').checked = true;
   document.getElementById('password-group').style.display = 'block';
   document.getElementById('key-group').style.display = 'none';
+
+  // Reset conn-type label styling
+  document.querySelectorAll('.conn-type-label').forEach(label => {
+    const radio = label.querySelector('input[type="radio"]');
+    if (radio.value === 'ssh') {
+      label.classList.add('bg-primary/20', 'border', 'border-primary/30');
+      label.querySelector('span').classList.add('text-primary');
+    } else {
+      label.classList.remove('bg-primary/20', 'border', 'border-primary/30');
+      label.querySelector('span').classList.remove('text-primary');
+    }
+  });
+
   updateKeyDropdown();
   showModal('connection-modal');
 });
@@ -801,7 +829,7 @@ document.getElementById('cancel-btn').addEventListener('click', () => {
 });
 
 function editConnection(conn) {
-  document.getElementById('modal-title').textContent = 'Edit SSH Connection';
+  document.getElementById('modal-title').textContent = 'Edit Connection';
   document.getElementById('conn-id').value = conn.id;
   document.getElementById('conn-name').value = conn.name;
   document.getElementById('conn-host').value = conn.host;
@@ -809,6 +837,14 @@ function editConnection(conn) {
   document.getElementById('conn-username').value = conn.username;
   document.getElementById('conn-description').value = conn.description || '';
   document.getElementById('conn-password').value = '';
+
+  // Connection type
+  const connType = conn.connection_type || 'ssh';
+  document.querySelector(`input[name="conn-type"][value="${connType}"]`).checked = true;
+  document.getElementById('sftp-options-group').style.display = connType === 'sftp' ? 'block' : 'none';
+  document.getElementById('conn-initial-path').value = conn.initial_path || '';
+
+  // Auth type
   const authType = conn.auth_type || 'password';
   document.querySelector(`input[name="auth-type"][value="${authType}"]`).checked = true;
   document.getElementById('password-group').style.display = authType === 'password' ? 'block' : 'none';
@@ -816,6 +852,19 @@ function editConnection(conn) {
   if (authType === 'key' && conn.key_id) {
     document.getElementById('conn-key-id').value = conn.key_id;
   }
+
+  // Trigger label styling
+  document.querySelectorAll('.conn-type-label').forEach(label => {
+    const radio = label.querySelector('input[type="radio"]');
+    if (radio.value === connType) {
+      label.classList.add('bg-primary/20', 'border', 'border-primary/30');
+      label.querySelector('span').classList.add('text-primary');
+    } else {
+      label.classList.remove('bg-primary/20', 'border', 'border-primary/30');
+      label.querySelector('span').classList.remove('text-primary');
+    }
+  });
+
   updateKeyDropdown();
   showModal('connection-modal');
 }
@@ -824,13 +873,16 @@ document.getElementById('connection-form').addEventListener('submit', async (e) 
   e.preventDefault();
   const connId = document.getElementById('conn-id').value;
   const authType = document.querySelector('input[name="auth-type"]:checked').value;
+  const connType = document.querySelector('input[name="conn-type"]:checked').value;
   const data = {
     name: document.getElementById('conn-name').value,
     host: document.getElementById('conn-host').value,
     port: parseInt(document.getElementById('conn-port').value),
     username: document.getElementById('conn-username').value,
     description: document.getElementById('conn-description').value,
-    auth_type: authType
+    auth_type: authType,
+    connection_type: connType,
+    initial_path: document.getElementById('conn-initial-path').value || null
   };
 
   if (authType === 'password') {
