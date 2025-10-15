@@ -792,6 +792,948 @@ function connectSSHTerminal(conn) {
   loadConnections();
 }
 
+// ========== SFTP FILE MANAGER ==========
+
+function connectSFTP(conn) {
+  // Create SFTP tab
+  const tabId = createSFTPTab(conn.id, conn.name, conn.initial_path);
+  createTabUI(tabId);
+  switchTab(tabId);
+
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+  tab.ws = ws;
+  tab.localPath = '/';
+  tab.remotePath = conn.initial_path || '.';
+  tab.localFiles = [];
+  tab.remoteFiles = [];
+
+  ws.onopen = () => {
+    console.log('WebSocket opened for SFTP tab', tabId);
+    ws.send(JSON.stringify({ type: 'connect', connectionId: conn.id }));
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    const currentTab = tabs.get(tabId);
+    if (!currentTab) return;
+
+    if (msg.type === 'sftp-list') {
+      currentTab.remoteFiles = msg.files;
+      currentTab.remotePath = msg.path;
+      renderRemoteFiles(tabId);
+    } else if (msg.type === 'sftp-download') {
+      handleSFTPDownload(tabId, msg);
+      showToast('File downloaded successfully', 'success');
+    } else if (msg.type === 'sftp-upload') {
+      console.log('File uploaded successfully');
+      showToast('File uploaded successfully', 'success');
+      refreshRemoteFiles(tabId);
+    } else if (msg.type === 'sftp-delete') {
+      showToast('Deleted successfully', 'success');
+      refreshRemoteFiles(tabId);
+    } else if (msg.type === 'sftp-rename') {
+      showToast('Renamed successfully', 'success');
+      refreshRemoteFiles(tabId);
+    } else if (msg.type === 'sftp-mkdir') {
+      showToast('Folder created successfully', 'success');
+      refreshRemoteFiles(tabId);
+    } else if (msg.type === 'sftp-chmod') {
+      showToast('Permissions updated successfully', 'success');
+      refreshRemoteFiles(tabId);
+    } else if (msg.type === 'sftp-read') {
+      handleSFTPRead(tabId, msg);
+    } else if (msg.type === 'sftp-error') {
+      showToast(`SFTP Error: ${msg.message}`, 'error');
+    } else if (msg.type === 'status') {
+      console.log('SFTP Status:', msg.message);
+      // Initialize local files array as empty
+      if (msg.message === 'Connected') {
+        renderLocalFiles(tabId);
+      }
+    } else if (msg.type === 'error') {
+      console.error('SFTP Error:', msg.message);
+      alert(`Connection error: ${msg.message}`);
+    }
+  };
+
+  ws.onerror = (err) => {
+    console.error('WebSocket error for SFTP tab', tabId, err);
+    alert('SFTP connection error');
+  };
+
+  ws.onclose = () => {
+    console.log('WebSocket closed for SFTP tab', tabId);
+    const currentTab = tabs.get(tabId);
+    if (currentTab) {
+      currentTab.ws = null;
+    }
+  };
+
+  // Refresh connections list
+  loadConnections();
+}
+
+function createSFTPTab(connectionId, connectionName, initialPath) {
+  const tabId = nextTabId++;
+
+  // Create SFTP container
+  const sftpContainer = document.createElement('div');
+  sftpContainer.id = `sftp-${tabId}`;
+  sftpContainer.className = 'absolute inset-0 hidden bg-dark-400';
+
+  // Dual-pane layout
+  sftpContainer.innerHTML = `
+    <div class="h-full flex gap-4 p-4">
+      <!-- Local Files Panel -->
+      <div class="flex-1 flex flex-col bg-dark-300 rounded-xl border border-dark-100">
+        <div class="p-4 border-b border-dark-100 flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-semibold text-primary flex items-center gap-2">
+              <span class="material-icons">computer</span>
+              Local Files
+            </h3>
+            <div id="local-breadcrumb-${tabId}" class="text-xs text-gray-400 mt-1">/</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="local-upload-btn px-3 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary rounded-lg text-sm font-semibold transition-all" data-tab-id="${tabId}">
+              <span class="material-icons text-sm">upload_file</span> Upload
+            </button>
+            <button class="local-mkdir-btn px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400 rounded-lg text-sm font-semibold transition-all" data-tab-id="${tabId}">
+              <span class="material-icons text-sm">create_new_folder</span> New Folder
+            </button>
+          </div>
+        </div>
+        <div id="local-files-${tabId}" class="flex-1 overflow-y-auto p-4">
+          <div class="text-center text-gray-500 py-8">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Remote Files Panel -->
+      <div class="flex-1 flex flex-col bg-dark-300 rounded-xl border border-dark-100">
+        <div class="p-4 border-b border-dark-100 flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-semibold text-primary flex items-center gap-2">
+              <span class="material-icons">cloud</span>
+              Remote Files (${connectionName})
+            </h3>
+            <div id="remote-breadcrumb-${tabId}" class="text-xs text-gray-400 mt-1">${initialPath || '.'}</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="remote-upload-btn px-3 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary rounded-lg text-sm font-semibold transition-all" data-tab-id="${tabId}">
+              <span class="material-icons text-sm">upload</span> Upload from Local
+            </button>
+            <button class="remote-mkdir-btn px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400 rounded-lg text-sm font-semibold transition-all" data-tab-id="${tabId}">
+              <span class="material-icons text-sm">create_new_folder</span> New Folder
+            </button>
+          </div>
+        </div>
+        <div id="remote-files-${tabId}" class="flex-1 overflow-y-auto p-4">
+          <div class="text-center text-gray-500 py-8">Connecting...</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('terminals-container').appendChild(sftpContainer);
+
+  // Store tab info
+  tabs.set(tabId, {
+    type: 'sftp',
+    ws: null,
+    connectionId,
+    connectionName,
+    container: sftpContainer,
+    localPath: '/',
+    remotePath: initialPath || '.',
+    localFiles: [],
+    remoteFiles: []
+  });
+
+  // Attach event listeners
+  setTimeout(() => {
+    const uploadBtn = sftpContainer.querySelector('.local-upload-btn');
+    const mkdirBtn = sftpContainer.querySelector('.local-mkdir-btn');
+    const remoteUploadBtn = sftpContainer.querySelector('.remote-upload-btn');
+    const remoteMkdirBtn = sftpContainer.querySelector('.remote-mkdir-btn');
+
+    if (uploadBtn) uploadBtn.addEventListener('click', () => uploadLocalFile(tabId));
+    if (mkdirBtn) mkdirBtn.addEventListener('click', () => createLocalFolder(tabId));
+    if (remoteUploadBtn) remoteUploadBtn.addEventListener('click', () => uploadToRemote(tabId));
+    if (remoteMkdirBtn) remoteMkdirBtn.addEventListener('click', () => createRemoteFolder(tabId));
+  }, 100);
+
+  return tabId;
+}
+
+// loadLocalFiles() removed - local files are now managed as File objects in browser
+
+function refreshRemoteFiles(tabId) {
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) return;
+
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-list',
+    path: tab.remotePath
+  }));
+}
+
+function renderLocalFiles(tabId) {
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+
+  const container = document.getElementById(`local-files-${tabId}`);
+  const breadcrumb = document.getElementById(`local-breadcrumb-${tabId}`);
+
+  if (!container) return;
+
+  // Update breadcrumb to show "My Computer"
+  if (breadcrumb) {
+    breadcrumb.textContent = 'My Computer';
+  }
+
+  if (tab.localFiles.length === 0) {
+    container.innerHTML = '<div class="text-center text-gray-500 py-8">Click "Upload" to add files from your computer</div>';
+    return;
+  }
+
+  // Render file table (File objects)
+  const filesHTML = tab.localFiles.map((file, index) => {
+    const icon = 'insert_drive_file';
+    const color = 'text-gray-400';
+    const size = formatFileSize(file.size);
+
+    return `
+      <div class="file-item group flex items-center gap-3 p-3 rounded-lg hover:bg-dark-200 cursor-pointer transition-all border border-transparent hover:border-primary/30"
+           data-file-index="${index}" data-file-name="${file.name}">
+        <span class="material-icons ${color}">${icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-gray-200 truncate">${file.name}</div>
+          <div class="text-xs text-gray-500">${size}</div>
+        </div>
+        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button class="local-edit-btn p-1.5 hover:bg-green-500/20 rounded" data-file-index="${index}" data-file-name="${file.name}" title="Edit">
+            <span class="material-icons text-sm text-green-400">edit</span>
+          </button>
+          <button class="local-download-btn p-1.5 hover:bg-primary/20 rounded" data-file-index="${index}" title="Download">
+            <span class="material-icons text-sm text-primary">download</span>
+          </button>
+          <button class="local-delete-btn p-1.5 hover:bg-red-500/20 rounded" data-file-index="${index}" title="Delete">
+            <span class="material-icons text-sm text-red-400">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = filesHTML;
+
+  // Attach event listeners
+  container.querySelectorAll('.local-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editLocalFile(tabId, parseInt(btn.dataset.fileIndex), btn.dataset.fileName);
+    });
+  });
+
+  container.querySelectorAll('.local-download-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      downloadLocalFile(tabId, parseInt(btn.dataset.fileIndex));
+    });
+  });
+
+  container.querySelectorAll('.local-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteLocalFile(tabId, parseInt(btn.dataset.fileIndex));
+    });
+  });
+}
+
+function renderRemoteFiles(tabId) {
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+
+  const container = document.getElementById(`remote-files-${tabId}`);
+  const breadcrumb = document.getElementById(`remote-breadcrumb-${tabId}`);
+
+  if (!container) return;
+
+  // Update breadcrumb with clickable navigation
+  if (breadcrumb) {
+    renderRemoteBreadcrumb(tabId);
+  }
+
+  if (tab.remoteFiles.length === 0) {
+    container.innerHTML = '<div class="text-center text-gray-500 py-8">No files</div>';
+    return;
+  }
+
+  // Render file table
+  const filesHTML = tab.remoteFiles.map(file => {
+    const icon = file.type === 'directory' ? 'folder' : 'insert_drive_file';
+    const color = file.type === 'directory' ? 'text-yellow-400' : 'text-gray-400';
+    const size = file.type === 'directory' ? '-' : formatFileSize(file.size);
+
+    return `
+      <div class="file-item group flex items-center gap-3 p-3 rounded-lg hover:bg-dark-200 cursor-pointer transition-all border border-transparent hover:border-primary/30"
+           data-file-name="${file.name}" data-file-type="${file.type}">
+        <span class="material-icons ${color}">${icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-gray-200 truncate">${file.name}</div>
+          <div class="text-xs text-gray-500">${size}</div>
+        </div>
+        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button class="remote-edit-btn p-1.5 hover:bg-green-500/20 rounded" data-file-name="${file.name}" title="Edit">
+            <span class="material-icons text-sm text-green-400">edit</span>
+          </button>
+          <button class="remote-chmod-btn p-1.5 hover:bg-yellow-500/20 rounded" data-file-name="${file.name}" data-permissions="${file.permissions || 0}" title="Permissions">
+            <span class="material-icons text-sm text-yellow-400">lock</span>
+          </button>
+          <button class="remote-download-btn p-1.5 hover:bg-primary/20 rounded" data-file-name="${file.name}" title="Download">
+            <span class="material-icons text-sm text-primary">download</span>
+          </button>
+          <button class="remote-delete-btn p-1.5 hover:bg-red-500/20 rounded" data-file-name="${file.name}" data-is-dir="${file.type === 'directory'}" title="Delete">
+            <span class="material-icons text-sm text-red-400">delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = filesHTML;
+
+  // Attach event listeners
+  container.querySelectorAll('.file-item').forEach(item => {
+    item.addEventListener('dblclick', () => {
+      const fileType = item.dataset.fileType;
+      const fileName = item.dataset.fileName;
+      if (fileType === 'directory') {
+        navigateRemoteFolder(tabId, fileName);
+      }
+    });
+  });
+
+  container.querySelectorAll('.remote-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editRemoteFile(tabId, btn.dataset.fileName);
+    });
+  });
+
+  container.querySelectorAll('.remote-chmod-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      chmodRemoteFile(tabId, btn.dataset.fileName, parseInt(btn.dataset.permissions));
+    });
+  });
+
+  container.querySelectorAll('.remote-download-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      downloadRemoteFile(tabId, btn.dataset.fileName);
+    });
+  });
+
+  container.querySelectorAll('.remote-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteRemoteFile(tabId, btn.dataset.fileName, btn.dataset.isDir === 'true');
+    });
+  });
+}
+
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+// renderLocalBreadcrumb() removed - breadcrumb now shows "My Computer"
+
+function renderRemoteBreadcrumb(tabId) {
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+
+  const breadcrumb = document.getElementById(`remote-breadcrumb-${tabId}`);
+  if (!breadcrumb) return;
+
+  const path = tab.remotePath || '.';
+
+  // Handle different path formats (., ./, /path, path)
+  let normalizedPath = path;
+  if (path === '.' || path === './') {
+    normalizedPath = '.';
+  }
+
+  const parts = normalizedPath.split('/').filter(p => p && p !== '.');
+
+  // Build breadcrumb HTML with clickable segments
+  let breadcrumbHTML = `<span class="breadcrumb-segment cursor-pointer hover:text-primary transition-colors" data-path=".">Home</span>`;
+
+  let currentPath = '.';
+  parts.forEach((part, index) => {
+    currentPath = currentPath === '.' ? part : `${currentPath}/${part}`;
+    breadcrumbHTML += ` <span class="text-gray-600">/</span> <span class="breadcrumb-segment cursor-pointer hover:text-primary transition-colors" data-path="${currentPath}">${part}</span>`;
+  });
+
+  breadcrumb.innerHTML = breadcrumbHTML;
+
+  // Attach click handlers
+  breadcrumb.querySelectorAll('.breadcrumb-segment').forEach(segment => {
+    segment.addEventListener('click', () => {
+      const targetPath = segment.dataset.path;
+      tab.remotePath = targetPath;
+      refreshRemoteFiles(tabId);
+    });
+  });
+}
+
+// navigateLocalFolder() removed - local files don't support folder navigation
+
+function navigateRemoteFolder(tabId, folderName) {
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) return;
+
+  // Update path
+  tab.remotePath = `${tab.remotePath}/${folderName}`;
+
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-list',
+    path: tab.remotePath
+  }));
+}
+
+async function uploadLocalFile(tabId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true; // Allow multiple file selection
+  input.onchange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const tab = tabs.get(tabId);
+    if (!tab) return;
+
+    // Add files to local files array
+    files.forEach(file => {
+      // Check if file already exists
+      const existingIndex = tab.localFiles.findIndex(f => f.name === file.name);
+      if (existingIndex !== -1) {
+        // Replace existing file
+        tab.localFiles[existingIndex] = file;
+      } else {
+        // Add new file
+        tab.localFiles.push(file);
+      }
+    });
+
+    showToast(`Added ${files.length} file(s)`, 'success');
+    renderLocalFiles(tabId);
+  };
+  input.click();
+}
+
+async function createLocalFolder(tabId) {
+  // Local folders are not supported in browser file system
+  showToast('Folders are not supported for local files. Only individual files can be uploaded.', 'info');
+}
+
+async function uploadToRemote(tabId) {
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) {
+    showToast('SFTP connection not ready', 'error');
+    return;
+  }
+
+  if (tab.localFiles.length === 0) {
+    showToast('No local files available to upload', 'warning');
+    return;
+  }
+
+  // Create a simple file selector
+  const fileNames = tab.localFiles.map(f => f.name).join('\n');
+  const selectedFileName = prompt(`Select a file to upload to remote:\n\n${fileNames}\n\nEnter file name:`);
+
+  if (!selectedFileName) return;
+
+  const selectedFile = tab.localFiles.find(f => f.name === selectedFileName);
+  if (!selectedFile) {
+    showToast(`File "${selectedFileName}" not found`, 'error');
+    return;
+  }
+
+  try {
+    showToast(`Uploading ${selectedFile.name}...`, 'info');
+
+    // Convert File to base64
+    const reader = new FileReader();
+
+    reader.onloadend = () => {
+      const base64Content = reader.result.split(',')[1]; // Remove data:*/*;base64, prefix
+
+      // Upload to remote SFTP server
+      const remotePath = `${tab.remotePath}/${selectedFile.name}`;
+
+      tab.ws.send(JSON.stringify({
+        type: 'sftp-upload',
+        path: remotePath,
+        content: base64Content
+      }));
+
+      console.log(`Uploading ${selectedFile.name} to ${remotePath}`);
+    };
+
+    reader.readAsDataURL(selectedFile);
+  } catch (err) {
+    console.error('Upload error:', err);
+    showToast(`Failed to upload: ${err.message}`, 'error');
+  }
+}
+
+function createRemoteFolder(tabId) {
+  const folderName = prompt('Enter folder name:');
+  if (!folderName) return;
+
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) return;
+
+  const remotePath = `${tab.remotePath}/${folderName}`;
+
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-mkdir',
+    path: remotePath
+  }));
+}
+
+async function downloadLocalFile(tabId, fileIndex) {
+  try {
+    const tab = tabs.get(tabId);
+    if (!tab) return;
+
+    const file = tab.localFiles[fileIndex];
+    if (!file) {
+      showToast('File not found', 'error');
+      return;
+    }
+
+    // Create download link
+    const url = window.URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    showToast('File downloaded', 'success');
+  } catch (err) {
+    console.error('Download error:', err);
+    showToast('Failed to download file', 'error');
+  }
+}
+
+function downloadRemoteFile(tabId, fileName) {
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) return;
+
+  const remotePath = `${tab.remotePath}/${fileName}`;
+
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-download',
+    path: remotePath
+  }));
+}
+
+function handleSFTPDownload(tabId, msg) {
+  try {
+    // Decode base64 content
+    const binaryString = atob(msg.content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const blob = new Blob([bytes]);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = msg.path.split('/').pop();
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Download error:', err);
+    alert('Failed to download file');
+  }
+}
+
+async function deleteLocalFile(tabId, fileIndex) {
+  if (!confirm('Remove this file from the list?')) return;
+
+  try {
+    const tab = tabs.get(tabId);
+    if (!tab) return;
+
+    // Remove file from array
+    tab.localFiles.splice(fileIndex, 1);
+    renderLocalFiles(tabId);
+    showToast('File removed', 'success');
+  } catch (err) {
+    console.error('Delete error:', err);
+    showToast('Failed to remove file', 'error');
+  }
+}
+
+function deleteRemoteFile(tabId, fileName, isDirectory) {
+  if (!confirm(`Delete this ${isDirectory ? 'folder' : 'file'}?`)) return;
+
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) return;
+
+  const remotePath = `${tab.remotePath}/${fileName}`;
+
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-delete',
+    path: remotePath,
+    isDirectory: isDirectory
+  }));
+}
+
+// ========== FILE EDITOR ==========
+
+let currentEditContext = null; // Stores { type: 'local'|'remote', tabId, fileId, fileName, filePath }
+
+async function editLocalFile(tabId, fileIndex, fileName) {
+  try {
+    const tab = tabs.get(tabId);
+    if (!tab) return;
+
+    const file = tab.localFiles[fileIndex];
+    if (!file) {
+      showToast('File not found', 'error');
+      return;
+    }
+
+    // Read file content
+    const text = await file.text();
+
+    // Store edit context
+    currentEditContext = {
+      type: 'local',
+      tabId: tabId,
+      fileIndex: fileIndex,
+      fileName: fileName
+    };
+
+    // Populate modal
+    document.getElementById('file-editor-title').textContent = fileName;
+    document.getElementById('file-editor-location').textContent = `Local: ${fileName}`;
+    document.getElementById('file-editor-content').value = text;
+
+    // Show modal
+    showModal('file-editor-modal');
+  } catch (err) {
+    console.error('Edit error:', err);
+    showToast(`Failed to open file: ${err.message}`, 'error');
+  }
+}
+
+function editRemoteFile(tabId, fileName) {
+  const tab = tabs.get(tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) {
+    alert('SFTP connection not ready');
+    return;
+  }
+
+  const remotePath = `${tab.remotePath}/${fileName}`;
+
+  // Store edit context
+  currentEditContext = {
+    type: 'remote',
+    tabId: tabId,
+    fileName: fileName,
+    filePath: remotePath
+  };
+
+  // Request file content from remote server
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-read',
+    path: remotePath
+  }));
+
+  // Show loading state
+  document.getElementById('file-editor-title').textContent = fileName;
+  document.getElementById('file-editor-location').textContent = `Remote: ${remotePath}`;
+  document.getElementById('file-editor-content').value = 'Loading...';
+  showModal('file-editor-modal');
+}
+
+function handleSFTPRead(tabId, msg) {
+  if (!msg.success) {
+    alert(`Failed to read file: ${msg.error || 'Unknown error'}`);
+    hideModal('file-editor-modal');
+    return;
+  }
+
+  try {
+    // Decode base64 content to text
+    const text = atob(msg.content);
+    document.getElementById('file-editor-content').value = text;
+  } catch (err) {
+    console.error('Decode error:', err);
+    alert('Failed to decode file content');
+    hideModal('file-editor-modal');
+  }
+}
+
+async function saveFileEdits() {
+  if (!currentEditContext) return;
+
+  const content = document.getElementById('file-editor-content').value;
+
+  try {
+    if (currentEditContext.type === 'local') {
+      // Create new File object with updated content
+      const tab = tabs.get(currentEditContext.tabId);
+      if (!tab) return;
+
+      const newFile = new File([content], currentEditContext.fileName, {
+        type: 'text/plain'
+      });
+
+      // Replace file in array
+      tab.localFiles[currentEditContext.fileIndex] = newFile;
+
+      showToast('File saved successfully', 'success');
+      renderLocalFiles(currentEditContext.tabId);
+      hideModal('file-editor-modal');
+      currentEditContext = null;
+
+    } else if (currentEditContext.type === 'remote') {
+      // Save to remote SFTP server
+      const tab = tabs.get(currentEditContext.tabId);
+      if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) {
+        showToast('SFTP connection lost', 'error');
+        return;
+      }
+
+      // Convert text content to base64
+      const base64Content = btoa(content);
+
+      tab.ws.send(JSON.stringify({
+        type: 'sftp-upload',
+        path: currentEditContext.filePath,
+        content: base64Content
+      }));
+
+      showToast('Saving file...', 'info');
+      // Refresh remote files
+      refreshRemoteFiles(currentEditContext.tabId);
+      hideModal('file-editor-modal');
+      currentEditContext = null;
+    }
+  } catch (err) {
+    console.error('Save error:', err);
+    showToast(`Failed to save: ${err.message}`, 'error');
+  }
+}
+
+// File editor modal event listeners
+document.getElementById('close-editor-btn').addEventListener('click', () => {
+  hideModal('file-editor-modal');
+  currentEditContext = null;
+});
+
+document.getElementById('cancel-editor-btn').addEventListener('click', () => {
+  hideModal('file-editor-modal');
+  currentEditContext = null;
+});
+
+document.getElementById('save-editor-btn').addEventListener('click', () => {
+  saveFileEdits();
+});
+
+// ========== CHMOD MODAL ==========
+
+let currentChmodContext = null; // Stores { tabId, fileName, filePath }
+
+function chmodRemoteFile(tabId, fileName, permissions) {
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+
+  const remotePath = `${tab.remotePath}/${fileName}`;
+
+  // Store chmod context
+  currentChmodContext = {
+    tabId: tabId,
+    fileName: fileName,
+    filePath: remotePath
+  };
+
+  // Set file name in modal
+  document.getElementById('chmod-file-name').textContent = `File: ${remotePath}`;
+
+  // Parse permissions from octal (permissions is a number like 33188 for 644)
+  // Extract last 3 octal digits for user/group/others
+  const mode = permissions & 0o777;
+
+  // Owner permissions
+  document.getElementById('chmod-owner-read').checked = (mode & 0o400) !== 0;
+  document.getElementById('chmod-owner-write').checked = (mode & 0o200) !== 0;
+  document.getElementById('chmod-owner-execute').checked = (mode & 0o100) !== 0;
+
+  // Group permissions
+  document.getElementById('chmod-group-read').checked = (mode & 0o040) !== 0;
+  document.getElementById('chmod-group-write').checked = (mode & 0o020) !== 0;
+  document.getElementById('chmod-group-execute').checked = (mode & 0o010) !== 0;
+
+  // Others permissions
+  document.getElementById('chmod-others-read').checked = (mode & 0o004) !== 0;
+  document.getElementById('chmod-others-write').checked = (mode & 0o002) !== 0;
+  document.getElementById('chmod-others-execute').checked = (mode & 0o001) !== 0;
+
+  // Update octal display
+  updateChmodOctal();
+
+  // Show modal
+  showModal('chmod-modal');
+}
+
+function updateChmodOctal() {
+  let mode = 0;
+
+  // Owner
+  if (document.getElementById('chmod-owner-read').checked) mode += 0o400;
+  if (document.getElementById('chmod-owner-write').checked) mode += 0o200;
+  if (document.getElementById('chmod-owner-execute').checked) mode += 0o100;
+
+  // Group
+  if (document.getElementById('chmod-group-read').checked) mode += 0o040;
+  if (document.getElementById('chmod-group-write').checked) mode += 0o020;
+  if (document.getElementById('chmod-group-execute').checked) mode += 0o010;
+
+  // Others
+  if (document.getElementById('chmod-others-read').checked) mode += 0o004;
+  if (document.getElementById('chmod-others-write').checked) mode += 0o002;
+  if (document.getElementById('chmod-others-execute').checked) mode += 0o001;
+
+  // Display as octal string
+  document.getElementById('chmod-octal').textContent = mode.toString(8).padStart(3, '0');
+}
+
+function applyChmod() {
+  if (!currentChmodContext) return;
+
+  const tab = tabs.get(currentChmodContext.tabId);
+  if (!tab || !tab.ws || tab.ws.readyState !== WebSocket.OPEN) {
+    alert('SFTP connection not ready');
+    return;
+  }
+
+  // Calculate mode
+  let mode = 0;
+  if (document.getElementById('chmod-owner-read').checked) mode += 0o400;
+  if (document.getElementById('chmod-owner-write').checked) mode += 0o200;
+  if (document.getElementById('chmod-owner-execute').checked) mode += 0o100;
+  if (document.getElementById('chmod-group-read').checked) mode += 0o040;
+  if (document.getElementById('chmod-group-write').checked) mode += 0o020;
+  if (document.getElementById('chmod-group-execute').checked) mode += 0o010;
+  if (document.getElementById('chmod-others-read').checked) mode += 0o004;
+  if (document.getElementById('chmod-others-write').checked) mode += 0o002;
+  if (document.getElementById('chmod-others-execute').checked) mode += 0o001;
+
+  // Send chmod command via WebSocket
+  tab.ws.send(JSON.stringify({
+    type: 'sftp-chmod',
+    path: currentChmodContext.filePath,
+    mode: mode
+  }));
+
+  // Close modal
+  hideModal('chmod-modal');
+  currentChmodContext = null;
+}
+
+// Chmod modal event listeners
+document.querySelectorAll('.chmod-checkbox').forEach(checkbox => {
+  checkbox.addEventListener('change', updateChmodOctal);
+});
+
+document.getElementById('cancel-chmod-btn').addEventListener('click', () => {
+  hideModal('chmod-modal');
+  currentChmodContext = null;
+});
+
+document.getElementById('save-chmod-btn').addEventListener('click', () => {
+  applyChmod();
+});
+
+// ========== TOAST NOTIFICATIONS ==========
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+
+  // Set colors based on type
+  let bgColor, borderColor, iconColor, icon;
+  switch (type) {
+    case 'success':
+      bgColor = 'bg-green-500/10';
+      borderColor = 'border-green-500/30';
+      iconColor = 'text-green-400';
+      icon = 'check_circle';
+      break;
+    case 'error':
+      bgColor = 'bg-red-500/10';
+      borderColor = 'border-red-500/30';
+      iconColor = 'text-red-400';
+      icon = 'error';
+      break;
+    case 'warning':
+      bgColor = 'bg-yellow-500/10';
+      borderColor = 'border-yellow-500/30';
+      iconColor = 'text-yellow-400';
+      icon = 'warning';
+      break;
+    default: // info
+      bgColor = 'bg-primary/10';
+      borderColor = 'border-primary/30';
+      iconColor = 'text-primary';
+      icon = 'info';
+  }
+
+  toast.className = `${bgColor} ${borderColor} border rounded-xl p-4 backdrop-blur-sm shadow-lg flex items-center gap-3 animate-slide-in-right`;
+  toast.innerHTML = `
+    <span class="material-icons ${iconColor}">${icon}</span>
+    <span class="text-sm text-white flex-1">${message}</span>
+    <button class="toast-close text-gray-400 hover:text-white transition-colors">
+      <span class="material-icons text-sm">close</span>
+    </button>
+  `;
+
+  // Add close handler
+  toast.querySelector('.toast-close').addEventListener('click', () => {
+    toast.style.animation = 'slide-out-right 0.3s ease-out';
+    setTimeout(() => toast.remove(), 300);
+  });
+
+  container.appendChild(toast);
+
+  // Auto-remove after 4 seconds
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.style.animation = 'slide-out-right 0.3s ease-out';
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 4000);
+}
+
 // ========== CONNECTION MODALS ==========
 
 document.getElementById('add-connection-btn').addEventListener('click', () => {

@@ -1079,6 +1079,26 @@ wss.on('connection', (ws, req) => {
           }
         });
       }
+      else if (data.type === 'sftp-read') {
+        if (!sftpSession) {
+          ws.send(JSON.stringify({ type: 'sftp-error', message: 'SFTP session not established' }));
+          return;
+        }
+
+        const remotePath = data.path;
+        sftpSession.readFile(remotePath, (err, buffer) => {
+          if (err) {
+            ws.send(JSON.stringify({ type: 'sftp-read', success: false, error: err.message, path: remotePath }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'sftp-read',
+              path: remotePath,
+              content: buffer.toString('base64'),
+              success: true
+            }));
+          }
+        });
+      }
     } catch (err) {
       console.error('WebSocket message error:', err);
       if (ws.readyState === WebSocket.OPEN) {

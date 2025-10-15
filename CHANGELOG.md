@@ -5,6 +5,84 @@ All notable changes to ShellPoint will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-10-15
+
+### Added
+- **SFTP File Manager Feature**
+  - Dual-pane visual file manager with local and remote file browsing
+  - Local panel: Browse and manage files from user's computer using File API
+  - Remote panel: Browse and manage files on SFTP server
+  - Support for multiple file selection and upload
+  - Drag-and-drop file operations
+
+- **File Operations**
+  - Upload files from local computer to SFTP server
+  - Download files from SFTP server to local computer
+  - Edit text files directly in browser with modal editor
+  - Delete files and folders
+  - Create new folders on remote server
+  - Change file permissions (chmod) with visual permission editor
+
+- **File Editor Modal**
+  - Full-screen modal for editing text files
+  - Monospace font for code editing
+  - Save changes to both local and remote files
+  - File location indicator (Local vs Remote)
+
+- **Chmod Permission Modal**
+  - Visual checkboxes for Owner/Group/Others permissions
+  - Read/Write/Execute toggles for each category
+  - Real-time octal mode display (e.g., 644, 755, 777)
+  - Apply changes directly to remote files
+
+- **Toast Notification System**
+  - Beautiful slide-in notifications from the right
+  - Four notification types: success (green), error (red), warning (yellow), info (blue)
+  - Auto-dismiss after 4 seconds with manual close option
+  - Smooth animations with Tailwind CSS
+  - Replace alert() dialogs for better UX
+
+- **Connection Type Selection**
+  - Choose between "SSH Terminal" or "SFTP File Manager" when creating connections
+  - Optional initial path configuration for SFTP connections
+  - Connection-specific icons and labels
+
+- **File Browser Features**
+  - Clickable breadcrumb navigation for remote directories
+  - File type icons (folders vs files)
+  - File size display with human-readable formatting
+  - Hover effects with edit/chmod/download/delete buttons
+  - Double-click to navigate into folders
+
+### Changed
+- Improved button visibility with proper group hover classes
+- Enhanced error handling across all file operations
+- Replaced server-side file storage with browser File API for local files
+- Updated connection modal to support SSH/SFTP selection
+- Modified WebSocket protocol to include SFTP operations
+- Breadcrumb for local files now shows "My Computer"
+
+### Fixed
+- Edit/delete/chmod button visibility issues on file items
+- File upload now uses actual files from user's computer
+- Local file operations no longer depend on server-side storage
+- Proper File object handling in browser
+- Toast notifications replace error-prone alert() dialogs
+
+### UI/UX Improvements
+- Material Design icons for all file operations (edit, lock, download, delete)
+- Color-coded action buttons (green=edit, yellow=chmod, blue=download, red=delete)
+- Smooth hover transitions on file items
+- Professional modal dialogs for file editing and permissions
+- Responsive dual-pane layout with proper spacing
+- Loading states and progress indicators for file operations
+
+### API Changes
+- Database migration: Added `connection_type` column to connections table
+- Database migration: Added `initial_path` column for SFTP connections
+- WebSocket protocol: Added SFTP operations (list, upload, download, delete, chmod, mkdir, read)
+- Server-side SFTP handlers for all file operations
+
 ## [1.2.0] - 2025-10-13
 
 ### Added

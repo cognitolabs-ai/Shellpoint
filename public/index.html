@@ -20,11 +20,21 @@
           animation: {
             'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             'gradient': 'gradient 3s ease infinite',
+            'slide-in-right': 'slide-in-right 0.3s ease-out',
+            'slide-out-right': 'slide-out-right 0.3s ease-out'
           },
           keyframes: {
             gradient: {
               '0%, 100%': { backgroundPosition: '0% 50%' },
               '50%': { backgroundPosition: '100% 50%' },
+            },
+            'slide-in-right': {
+              '0%': { transform: 'translateX(100%)', opacity: '0' },
+              '100%': { transform: 'translateX(0)', opacity: '1' }
+            },
+            'slide-out-right': {
+              '0%': { transform: 'translateX(0)', opacity: '1' },
+              '100%': { transform: 'translateX(100%)', opacity: '0' }
             }
           }
         }
@@ -437,6 +447,119 @@
       </div>
     </div>
   </div>
+
+  <!-- File Editor Modal -->
+  <div id="file-editor-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-300 rounded-2xl shadow-2xl w-full max-w-4xl border border-dark-100/50 max-h-[90vh] flex flex-col">
+      <div class="p-6 border-b border-dark-100/50 flex items-center justify-between flex-shrink-0">
+        <div>
+          <h3 class="text-2xl font-bold text-primary flex items-center gap-2">
+            <span class="material-icons">edit</span>
+            <span id="file-editor-title">Edit File</span>
+          </h3>
+          <p class="text-xs text-gray-400 mt-1" id="file-editor-location"></p>
+        </div>
+        <button id="close-editor-btn" class="text-gray-400 hover:text-white transition-colors">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+      <div class="flex-1 p-6 overflow-hidden flex flex-col">
+        <textarea id="file-editor-content"
+                  class="w-full h-full px-4 py-3 bg-dark-200 border border-dark-100 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white font-mono text-sm resize-none"
+                  placeholder="File content..."></textarea>
+      </div>
+      <div class="p-6 border-t border-dark-100/50 flex gap-3 flex-shrink-0">
+        <button type="button" id="cancel-editor-btn" class="flex-1 px-6 py-3 bg-dark-200 hover:bg-dark-100 rounded-xl font-semibold transition-all">Cancel</button>
+        <button type="button" id="save-editor-btn" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chmod Modal -->
+  <div id="chmod-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-dark-300 rounded-2xl shadow-2xl w-full max-w-md border border-dark-100/50">
+      <div class="p-6 border-b border-dark-100/50">
+        <h3 class="text-2xl font-bold text-primary flex items-center gap-2">
+          <span class="material-icons">lock</span>
+          <span>Change Permissions</span>
+        </h3>
+        <p class="text-xs text-gray-400 mt-1" id="chmod-file-name"></p>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- Owner Permissions -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-3">Owner</label>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-owner-read" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Read</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-owner-write" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Write</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-owner-execute" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Execute</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Group Permissions -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-3">Group</label>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-group-read" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Read</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-group-write" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Write</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-group-execute" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Execute</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Others Permissions -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-3">Others</label>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-others-read" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Read</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-others-write" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Write</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" id="chmod-others-execute" class="chmod-checkbox w-4 h-4 text-primary rounded focus:ring-primary">
+              <span class="text-sm text-gray-300">Execute</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Octal Preview -->
+        <div class="p-4 bg-dark-200 rounded-xl border border-dark-100">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-400">Octal Mode:</span>
+            <span id="chmod-octal" class="text-2xl font-bold text-primary font-mono">644</span>
+          </div>
+        </div>
+      </div>
+      <div class="p-6 border-t border-dark-100/50 flex gap-3">
+        <button type="button" id="cancel-chmod-btn" class="flex-1 px-6 py-3 bg-dark-200 hover:bg-dark-100 rounded-xl font-semibold transition-all">Cancel</button>
+        <button type="button" id="save-chmod-btn" class="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-light hover:from-primary/90 hover:to-primary-light/90 rounded-xl font-semibold shadow-lg shadow-primary/20">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 max-w-md"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>

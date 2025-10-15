@@ -19,6 +19,12 @@
 - **🔐 Secure Authentication** - JWT-based authentication with bcrypt password hashing
 - **🔑 SSH Key Support** - RSA, ED25519, and ECDSA key authentication
 - **📑 Multiple Sessions** - Handle multiple SSH connections in tabs
+- **📁 SFTP File Manager** - Visual dual-pane file manager with drag-and-drop support
+  - Browse local files from your computer and remote SFTP files side-by-side
+  - Upload/download files between local and remote
+  - Edit text files directly in the browser
+  - Change file permissions (chmod) with visual interface
+  - Create folders, delete files, and manage remote file system
 - **🎨 Terminal Themes** - 8 beautiful terminal color schemes (Dracula, Nord, Tokyo Night, etc.)
 - **👤 User Profiles** - Manage user settings and preferences
 - **💾 Connection Manager** - Save and organize SSH connections with descriptions
@@ -127,7 +133,7 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 2. Click **Register** and create an account
 3. Log in with your credentials
 
-### Adding SSH Connections
+### Adding Connections
 
 1. Click **"Add Connection"** button
 2. Fill in connection details:
@@ -136,10 +142,31 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
    - **Port**: SSH port (default: 22)
    - **Username**: SSH username
    - **Description**: Optional notes
-3. Choose authentication method:
+3. Choose connection type:
+   - **SSH Terminal**: Interactive terminal session
+   - **SFTP File Manager**: Visual file browser
+4. Choose authentication method:
    - **Password**: Enter SSH password
    - **SSH Key**: Select from vault or add new key
-4. Click **Save**
+5. Click **Save**
+
+### Using SFTP File Manager
+
+1. Create an SFTP connection (select "SFTP File Manager" as connection type)
+2. Click the connection to open the file manager
+3. **Local Panel** (left):
+   - Click "Upload" to add files from your computer
+   - Files are temporarily stored in browser for transfer
+4. **Remote Panel** (right):
+   - Browse remote server files
+   - Create folders, edit files, change permissions
+   - Download files to your computer
+5. **File Operations**:
+   - **Edit**: Click edit icon to modify text files
+   - **Chmod**: Click lock icon to change file permissions
+   - **Download**: Click download icon to save file
+   - **Delete**: Click trash icon to remove file
+   - **Upload from Local**: Select files in local panel, then click "Upload from Local" in remote panel
 
 ### Managing SSH Keys
 
