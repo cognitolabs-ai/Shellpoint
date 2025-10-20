@@ -10,7 +10,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://github.com/cognitiolabs/shellpoint)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 
-*Developed by [CognitioLabs](https://cognitiolabs.eu)*
+*Developed by [CognitioLabs](https://www.cognitiolabs.eu)*
 
 </div>
 
@@ -277,15 +277,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/cognitiolabs/shellpoint/issues)
-- **Website**: [https://cognitiolabs.eu](https://cognitiolabs.eu)
+- **Website**: [https://cognitiolabs.eu](https://www.cognitiolabs.eu)
 - **Email**: info@cognitiolabs.eu
 
 ---
 
 <div align="center">
 
-**Made with ❤️ by [CognitioLabs](https://cognitiolabs.eu)**
+**Made with ❤️ by [CognitioLabs](https://www.cognitiolabs.eu)**
 
-[Website](https://cognitiolabs.eu) · [GitHub](https://github.com/cognitiolabs) · [Documentation](https://github.com/cognitiolabs/shellpoint/blob/main/docs/knowledge-base.md)
+[Website](https://www.cognitiolabs.eu) · [GitHub](https://github.com/cognitiolabs) · [Documentation](https://github.com/cognitiolabs/shellpoint/blob/main/docs/knowledge-base.md)
 
 </div>
