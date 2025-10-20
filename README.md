@@ -277,7 +277,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/cognitiolabs/shellpoint/issues)
-- **Website**: [https://cognitiolabs.eu](https://www.cognitiolabs.eu)
+- **Website**: [https://www.cognitiolabs.eu](https://www.cognitiolabs.eu)
 - **Email**: info@cognitiolabs.eu
 
 ---
