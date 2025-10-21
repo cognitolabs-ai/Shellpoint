@@ -184,6 +184,33 @@ function authenticateToken(req, res, next) {
   }
 }
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: require('./package.json').version,
+    memory: {
+      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
+    },
+    database: checkDatabaseHealth()
+  };
+  
+  res.status(200).json(health);
+});
+
+function checkDatabaseHealth() {
+  try {
+    const result = db.prepare('SELECT COUNT(*) as count FROM users').get();
+    return { status: 'connected', userCount: result.count };
+  } catch (err) {
+    return { status: 'error', message: err.message };
+  }
+}
+
 // Auth endpoints
 app.post('/api/auth/register', async (req, res) => {
   try {

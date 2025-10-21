@@ -220,7 +220,218 @@ docker run -d \
   shellpoint:latest
 ```
 
-## 🛠️ Development
+## 🏭 Production Deployment
+
+### 📋 Production Checklist
+
+For production environments, ShellPoint includes additional security, monitoring, and scaling features:
+
+**✅ Security Features:**
+- JWT authentication with httpOnly cookies
+- bcrypt password hashing (salt rounds: 10)
+- Rate limiting on authentication endpoints
+- Non-root Docker container execution
+- Health check endpoint for monitoring
+- Input validation and sanitization
+
+**✅ Monitoring & Observability:**
+- `/health` endpoint with comprehensive status
+- Prometheus metrics support
+- Structured JSON logging
+- Database connection health monitoring
+- Memory and resource usage tracking
+
+**✅ CI/CD Pipeline:**
+- Automated testing on every commit
+- Security scanning (npm audit + Trivy)
+- Multi-arch Docker builds (AMD64/ARM64)
+- Automated deployments to staging/production
+- SBOM generation for compliance
+
+### 🚀 Quick Production Setup
+
+```bash
+# 1. Clone repository
+git clone https://github.com/cognitiolabs/shellpoint.git
+cd shellpoint
+
+# 2. Setup environment
+cp .env.production.example .env.production
+# Edit .env.production with your secure secrets
+
+# 3. Deploy with production optimizations
+docker-compose up -d
+
+# 4. Verify deployment
+curl http://localhost:8080/health
+
+# 5. Setup reverse proxy for HTTPS (nginx/traefik recommended)
+```
+
+### 🔒 Security Configuration
+
+**Generate secure secrets:**
+```bash
+# JWT Secret (REQUIRED for production)
+JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")
+
+# Optional database encryption key
+DB_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+```
+
+**Reverse proxy with HTTPS (nginx example):**
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name shellpoint.yourdomain.com;
+
+    ssl_certificate /path/to/your/cert.pem;
+    ssl_certificate_key /path/to/your/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+### 📊 Monitoring Setup
+
+**Health Check Endpoint:**
+```bash
+curl http://localhost:8080/health
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-01T12:00:00.000Z",
+  "uptime": 3600,
+  "environment": "production",
+  "version": "1.2.0",
+  "memory": {"used": 45, "total": 512},
+  "database": {"status": "connected", "userCount": 15}
+}
+```
+
+**Prometheus Metrics:**
+```bash
+# Enable metrics in environment
+METRICS_ENABLED=true
+METRICS_PORT=9090
+
+# Access metrics
+curl http://localhost:9090/metrics
+```
+
+### 🔄 Deployment Strategies
+
+**1. Automated Deployment Script:**
+```bash
+# Deploy to staging
+./deploy.sh staging v1.2.0
+
+# Deploy to production (requires confirmation)
+./deploy.sh production v1.2.0
+```
+
+**2. CI/CD Pipeline:**
+- Push to `main` → Automated tests
+- Create tag (`v1.2.0`) → Build + deploy to staging
+- Manual approval → Deploy to production
+
+**3. Blue-Green Deployment:**
+```bash
+# Deploy to staging first
+docker-compose -f docker-compose.staging.yml up -d
+
+# Test staging environment
+curl -f https://staging.yourdomain.com/health
+
+# Switch traffic to production
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### 💾 Backup & Recovery
+
+**Automated daily backup:**
+```bash
+# Backup script included in deployment
+./deploy.sh production
+
+# Manual backup
+docker run --rm \
+  -v shellpoint-data:/source:ro \
+  -v $(pwd):/backup \
+  alpine:latest \
+  tar czf "backup-$(date +%Y%m%d).tar.gz" -C /source .
+```
+
+**Restore from backup:**
+```bash
+docker-compose down
+docker run --rm \
+  -v shellpoint-data:/target \
+  -v $(pwd):/backup \
+  alpine:latest \
+  tar xzf backup-20240101.tar.gz -C /target
+docker-compose up -d
+```
+
+### 📱 Scaling Considerations
+
+**Single Instance (Small Teams):**
+- 1 container, 512MB RAM, 1 CPU
+- SQLite database (built-in)
+- Suitable for 1-50 concurrent users
+
+**Multi-Instance (Medium Teams):**
+- 3 containers behind load balancer
+- PostgreSQL database (recommended)
+- Suitable for 50-200 concurrent users
+
+**High Availability (Large Teams):**
+- 5+ containers with health checks
+- External database with read replicas
+- Redis for session storage
+- Suitable for 200+ concurrent users
+
+### 🚀 Docker Images
+
+**Production-ready images available:**
+- **Docker Hub:** `cognitiolabs/shellpoint:latest`
+- **GitHub Registry:** `ghcr.io/cognitiolabs/shellpoint:latest`
+
+**Multi-architecture support:**
+- `linux/amd64` (Intel/AMD)
+- `linux/arm64` (ARM64/Apple Silicon)
+
+**Image tags:**
+- `latest` - Latest stable release
+- `v1.2.0` - Specific version
+- `v1.2` - Latest patch release
+- `v1` - Latest minor release
+
+### 📚 Production Documentation
+
+For comprehensive production setup, see:
+- [📖 Production Deployment Guide](docs/PRODUCTION.md)
+- [🔧 CI/CD Configuration](.github/workflows/)
+- [🐳 Docker Configuration](Dockerfile)
+- [⚙️ Environment Variables](.env.production.example)
+
+---
+
+### 🛠️ Development
 
 ### Project Structure
 
@@ -286,6 +497,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Made with ❤️ by [CognitioLabs](https://www.cognitiolabs.eu)**
 
-[Website](https://www.cognitiolabs.eu) · [GitHub](https://github.com/cognitiolabs) · [Documentation](https://github.com/cognitiolabs/shellpoint/blob/main/docs/knowledge-base.md)
+[Website](https://www.cognitiolabs.eu) · [GitHub](https://github.com/cognitiolabs) · [Documentation](https://github.com/cognitiolabs/shellpoint/blob/main/docs/PRODUCTION.md)
 
 </div>

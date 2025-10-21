@@ -8,37 +8,126 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: production
     image: cognitiolabs/shellpoint:latest
     container_name: shellpoint
     restart: unless-stopped
+    # For production, consider using internal network and reverse proxy
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"  # Only bind to localhost for security
     environment:
+      # Core configuration
       - NODE_ENV=production
       - PORT=8080
       - DB_PATH=/app/data/ssh-client.db
       - JWT_SECRET=${JWT_SECRET}
+      
+      # Production optimizations
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - MAX_CONNECTIONS=${MAX_CONNECTIONS:-100}
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-7d}
+      
+      # Security settings
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-15m}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
+      
     volumes:
-      # Persistent database storage
+      # Persistent database storage with backup capability
       - shellpoint-data:/app/data
+      # Optional: Log volume for external log management
+      - shellpoint-logs:/app/data/logs
+      
       # Optional: Mount .env file for secrets
-      - ./.env:/app/.env:ro
+      - ./.env.production:/app/.env:ro
+      
     networks:
       - shellpoint-network
+      
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 30s
+    
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+    
     labels:
+      # Traefik/Routing labels (uncomment if using reverse proxy)
+      #- "traefik.enable=true"
+      #- "traefik.http.routers.shellpoint.rule=Host(`yourdomain.com`)"
+      #- "traefik.http.routers.shellpoint.tls=true"
+      #- "traefik.http.routers.shellpoint.tls.certresolver=letsencrypt"
+      
+      # Application metadata
       - "com.cognitiolabs.description=ShellPoint SSH Client"
-      - "com.cognitiolabs.version=1.0.0"
+      - "com.cognitiolabs.version=1.2.0"
+      - "com.cognitiolabs.environment=production"
+      
+      # Monitoring labels
+      - "prometheus.io.scrape=true"
+      - "prometheus.io.port=8080"
+      - "prometheus.io.path=/metrics"
+
+  # Optional: Nginx reverse proxy for production
+  # Uncomment if you want HTTPS and load balancing
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: shellpoint-nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - shellpoint
+  #   networks:
+  #     - shellpoint-network
+
+  # Optional: Prometheus monitoring (uncomment to enable)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: shellpoint-prometheus
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus-data:/prometheus
+  #   networks:
+  #     - shellpoint-network
 
 volumes:
   shellpoint-data:
     driver: local
+    # For production, consider using specific location:
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /opt/shellpoint/data
+  
+  shellpoint-logs:
+    driver: local
+    # For production:
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /opt/shellpoint/logs
+  # prometheus-data:
+  #   driver: local
 
 networks:
   shellpoint-network:
     driver: bridge
+    # For production with multiple containers:
+    # driver: overlay
+    # attachable: true

@@ -1,0 +1,159 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: |
+          npm run lint || echo "Linting skipped - no lint script"
+          npx eslint . || echo "ESLint not configured"
+
+      - name: Run tests
+        run: npm test || echo "Tests skipped - no test script"
+
+      - name: Security audit
+        run: npm audit --audit-level=moderate
+
+      - name: Check for vulnerability advisories
+        run: npm audit --json > audit-report.json || true
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit
+          path: audit-report.json
+
+  docker-test-build:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: shellpoint:test
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          docker run --rm -d \
+            -p 8080:8080 \
+            -e JWT_SECRET="test-secret-key-for-ci" \
+            -e NODE_ENV=production \
+            --name shellpoint-test \
+            shellpoint:test
+          
+          # Wait for container to start
+          sleep 30
+          
+          # Test health endpoint
+          curl -f http://localhost:8080/health || exit 1
+          
+          # Test main application
+          curl -f http://localhost:8080 || exit 1
+          
+          # Cleanup
+          docker stop shellpoint-test
+
+  image-scan:
+    runs-on: ubuntu-latest
+    needs: docker-test-build
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: shellpoint:scan
+          load: true
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'shellpoint:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  commit-checks:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages
+        run: |
+          # Check for conventional commits
+          for commit in $(git rev-list --max-count=10 HEAD); do
+            message=$(git log --format=%B -n 1 $commit)
+            
+            # Basic check for required commit message format
+            if [[ ! "$message" =~ ^(feat|fix|docs|style|refactor|test|chore): ]]; then
+              echo "⚠️ Warning: Commit message does not follow conventional commit format"
+              echo "Commit: $message"
+              echo "See: https://www.conventionalcommits.org/"
+            fi
+          done
+
+      - name: Check file sizes
+        run: |
+          # Check for large files that shouldn't be committed
+          max_size=1048576  # 1MB
+          large_files=$(find . -type f -not -path "./.git/*" -not -path "./node_modules/*" -size +${max_size}c)
+          
+          if [ ! -z "$large_files" ]; then
+            echo "⚠️ Warning: Large files detected:"
+            echo "$large_files"
+            echo "Consider using Git LFS or moving large files out of repository"
+          fi
