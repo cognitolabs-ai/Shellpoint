@@ -47,7 +47,7 @@ jobs:
 
     strategy:
       matrix:
-        registry: [dockerhub, ghcr]
+        registry: [ghcr, dockerhub]
       fail-fast: false
 
     steps:
@@ -93,6 +93,7 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
+        continue-on-error: true
         with:
           context: .
           platforms: linux/amd64,linux/arm64
