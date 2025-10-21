@@ -2,7 +2,7 @@
 
 # ShellPoint Production Deployment Script
 # Usage: ./deploy.sh [staging|production] [version]
-# Example: ./deploy.sh production v1.2.0
+# Example: ./deploy.sh production v1.3.0
 
 set -euo pipefail
 

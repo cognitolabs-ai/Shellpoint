@@ -317,7 +317,7 @@ curl http://localhost:8080/health
   "timestamp": "2024-01-01T12:00:00.000Z",
   "uptime": 3600,
   "environment": "production",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "memory": {"used": 45, "total": 512},
   "database": {"status": "connected", "userCount": 15}
 }
@@ -338,15 +338,15 @@ curl http://localhost:9090/metrics
 **1. Automated Deployment Script:**
 ```bash
 # Deploy to staging
-./deploy.sh staging v1.2.0
+./deploy.sh staging v1.3.0
 
 # Deploy to production (requires confirmation)
-./deploy.sh production v1.2.0
+./deploy.sh production v1.3.0
 ```
 
 **2. CI/CD Pipeline:**
 - Push to `main` → Automated tests
-- Create tag (`v1.2.0`) → Build + deploy to staging
+- Create tag (`v1.3.0`) → Build + deploy to staging
 - Manual approval → Deploy to production
 
 **3. Blue-Green Deployment:**
@@ -417,7 +417,7 @@ docker-compose up -d
 
 **Image tags:**
 - `latest` - Latest stable release
-- `v1.2.0` - Specific version
+- `v1.3.0` - Specific version
 - `v1.2` - Latest patch release
 - `v1` - Latest minor release
 
