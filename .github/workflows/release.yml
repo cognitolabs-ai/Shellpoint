@@ -1,4 +1,5 @@
 name: Release
+# Enhanced with Docker Hub and GitHub Registry publishing
 
 on:
   push:
@@ -46,7 +47,8 @@ jobs:
 
     strategy:
       matrix:
-        registry: [ghcr, dockerhub]
+        registry: [dockerhub, ghcr]
+      fail-fast: false
 
     steps:
       - name: Checkout code
@@ -69,6 +71,14 @@ jobs:
           registry: ${{ matrix.registry == 'ghcr' && env.REGISTRY_GH || env.REGISTRY_DH }}
           username: ${{ matrix.registry == 'ghcr' && github.actor || secrets.DOCKERHUB_USERNAME }}
           password: ${{ matrix.registry == 'ghcr' && secrets.GITHUB_TOKEN || secrets.DOCKERHUB_TOKEN }}
+
+      - name: Debug Docker Hub authentication
+        if: matrix.registry == 'dockerhub'
+        run: |
+          echo "Registry: ${{ env.REGISTRY_DH }}"
+          echo "Username: ${{ secrets.DOCKERHUB_USERNAME }}"
+          echo "Image name: cognitiolabs/shellpoint"
+          echo "Repository: ${{ github.repository }}"
 
       - name: Extract metadata for Docker
         id: meta
