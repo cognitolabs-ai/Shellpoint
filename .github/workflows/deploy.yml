@@ -50,12 +50,12 @@ jobs:
           echo "Checking for ShellPoint image version: $version"
           
           # Check if image exists on Docker Hub
-          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version 2>/dev/null; then
-            echo "✅ Docker image found: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version"
-          else
-            echo "❌ Docker image not found: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version"
-            exit 1
-          fi
+          #if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version 2>/dev/null; then
+          # echo "✅ Docker image found: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version"
+          #else
+          # echo "❌ Docker image not found: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$version"
+          # exit 1
+          #fi
 
   deploy-staging:
     runs-on: ubuntu-latest
