@@ -106,20 +106,20 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        if: matrix.registry == 'ghcr'
-        with:
-          image: ${{ env.REGISTRY_GH }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-          format: spdx-json
-          output-file: sbom.spdx.json
+      #- name: Generate SBOM
+      #  uses: anchore/sbom-action@v0
+      #  if: matrix.registry == 'ghcr'
+      #  with:
+      #    image: ${{ env.REGISTRY_GH }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+      #    format: spdx-json
+      #    output-file: sbom.spdx.json
 
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        if: matrix.registry == 'ghcr'
-        with:
-          name: sbom
-          path: sbom.spdx.json
+      #- name: Upload SBOM
+      #  uses: actions/upload-artifact@v4
+      #  if: matrix.registry == 'ghcr'
+      #  with:
+      #    name: sbom
+      #    path: sbom.spdx.json
 
   create-release:
     runs-on: ubuntu-latest
