@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
     # For production, consider using internal network and reverse proxy
     ports:
-      - "127.0.0.1:8080:8080"  # Only bind to localhost for security
+      - 8080:8080  # Only bind to localhost for security
     environment:
       # Core configuration
       - NODE_ENV=production
